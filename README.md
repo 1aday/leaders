@@ -20,6 +20,39 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## AI profile pictures (OpenAI + Replicate)
+
+This app can generate consistent leader **profile pictures** by:
+
+- Using **OpenAI** to turn a leader’s JSON into a *style-consistent* image prompt
+- Using **Replicate** to run `google/nano-banana-pro` to generate the image
+
+## AI intro videos (Replicate Kling v2.6)
+
+This app can also generate a cohesive ~10s **intro video** per leader by:
+
+- Using a **strict, shared trailer style guide** (so videos look consistent across leaders)
+- Using the leader’s **profile photo as a reference image** to keep identity consistent
+- Using **Replicate** to run `kwaivgi/kling-v2.6`
+
+### Usage
+
+Open any leader and click **Generate intro video**. The returned URL is saved into that leader’s `welcomeVideoUrl` in localStorage and will replace the placeholder in the profile page.
+
+### Environment variables
+
+1) Copy `env.example` → `.env.local` (don’t commit `.env.local`)
+
+2) Fill in:
+
+- `OPENAI_API_KEY`
+- `OPENAI_MODEL` (defaults to `gpt-5.2`)
+- `REPLICATE_API_TOKEN`
+
+### Usage
+
+Open any leader and click **Generate pic**. The returned URL is saved into that leader’s `profilePicUrl` in localStorage.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

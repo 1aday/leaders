@@ -1,0 +1,432 @@
+import "server-only";
+
+type AnyRecord = Record<string, unknown>;
+
+function isPlainObject(v: unknown): v is AnyRecord {
+  return !!v && typeof v === "object" && !Array.isArray(v);
+}
+
+function pickString(obj: AnyRecord | null, key: string): string | undefined {
+  if (!obj) return undefined;
+  const v = obj[key];
+  return typeof v === "string" && v.trim() ? v : undefined;
+}
+
+function safeJsonStringify(value: unknown, maxLen: number) {
+  try {
+    const s = JSON.stringify(value);
+    return s.length > maxLen ? s.slice(0, maxLen) : s;
+  } catch {
+    return "";
+  }
+}
+
+function normalizeReplicateOutputToUrl(output: unknown): string | null {
+  if (typeof output === "string" && output.startsWith("http")) return output;
+  if (Array.isArray(output)) {
+    const first = output.find((x) => typeof x === "string" && (x as string).startsWith("http"));
+    return typeof first === "string" ? first : null;
+  }
+  if (isPlainObject(output) && typeof output.url === "string" && output.url.startsWith("http")) {
+    return output.url;
+  }
+  return null;
+}
+
+function hashStringToSeed(s: string): number {
+  // Deterministic, cheap, stable (FNV-1a-ish)
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  // Replicate seeds are typically 32-bit ints
+  return (h >>> 0) % 2_147_483_647;
+}
+
+export type KlingTrailerPromptResult = {
+  prompt: string;
+  negativePrompt?: string;
+  styleId: string;
+};
+
+const STYLE_ID = "pmk.trailer.kling.v1";
+
+const STYLE_GUIDE = [
+  "Create a cinematic character trailer video.",
+  "Primary goals: (1) instantly communicates what the leader is about, (2) looks cohesive across a gallery of leaders, (3) keeps identity consistent with the provided reference image.",
+  "",
+  "CONSISTENT VIDEO DIRECTION (do not vary):",
+  "- photorealistic, high-end cinematic look (NOT animation, NOT illustration, NOT 3D render)",
+  "- structure: 3 beats (opening close-up → action/competence moment → hero pose)",
+  "- camera: smooth stabilized movement; subtle dolly/track + gentle orbit; no shaky cam",
+  "- lighting: clean cinematic key + soft rim; flattering skin; tasteful contrast",
+  "- background: minimal, modern, abstract environment (no busy scenery), subtle domain cues only",
+  "- color grade: filmic, slightly warm highlights, clean blacks; consistent across leaders",
+  "- no text, no subtitles, no logos, no watermarks",
+  "",
+  "IDENTITY CONSISTENCY (strict):",
+  "- Use the reference image to anchor: same person, same face, same hairstyle, same age, same wardrobe vibe.",
+  "- Single subject only. No extra people. No clones. No face swaps.",
+  "",
+  "SAFE + CLEAN:",
+  "- safe-for-work only",
+  "- no violence, no gore, no weapons, no political symbols, no brand marks",
+].join("\n");
+
+export async function generateKlingTrailerPromptWithOpenAI(opts: {
+  leaderJson: unknown;
+  leaderId?: string;
+}): Promise<KlingTrailerPromptResult> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error("Missing OPENAI_API_KEY");
+  }
+
+  const model = process.env.OPENAI_MODEL || "gpt-5.2";
+
+  const root = isPlainObject(opts.leaderJson) ? opts.leaderJson : null;
+  const core = root && isPlainObject(root.coreIdentity) ? (root.coreIdentity as AnyRecord) : null;
+  const meta = root && isPlainObject(root.metadata) ? (root.metadata as AnyRecord) : null;
+  const visual = root && isPlainObject(root.visualIdentity) ? (root.visualIdentity as AnyRecord) : null;
+  const visualStyle = visual && isPlainObject(visual.visualStyle) ? (visual.visualStyle as AnyRecord) : null;
+  const comm = root && isPlainObject(root.communicationStyle) ? (root.communicationStyle as AnyRecord) : null;
+  const voice = comm && isPlainObject(comm.voice) ? (comm.voice as AnyRecord) : null;
+
+  const compact = {
+    id: opts.leaderId ?? pickString(meta, "leaderId"),
+    vertical: pickString(meta, "vertical"),
+    subDomains: Array.isArray(meta?.subDomains) ? (meta?.subDomains as unknown[]).filter((v) => typeof v === "string").slice(0, 6) : undefined,
+    tagline: pickString(core, "tagline"),
+    missionStatement: pickString(core, "missionStatement"),
+    archetype: pickString(visualStyle, "archetype") ?? pickString(visual, "archetype"),
+    styleNotes: pickString(visualStyle, "styleNotes") ?? pickString(visualStyle, "wardrobe"),
+    voiceSummary: pickString(voice, "summary"),
+    doSay: Array.isArray(voice?.doSay) ? (voice?.doSay as unknown[]).filter((v) => typeof v === "string").slice(0, 5) : undefined,
+    dontSay: Array.isArray(voice?.dontSay) ? (voice?.dontSay as unknown[]).filter((v) => typeof v === "string").slice(0, 5) : undefined,
+    catchphrases: Array.isArray(voice?.catchphrases) ? (voice?.catchphrases as unknown[]).filter((v) => typeof v === "string").slice(0, 5) : undefined,
+  };
+
+  const leaderContext = safeJsonStringify(compact, 6000);
+
+  const system = [
+    "You are a world-class prompt engineer for cinematic AI video generation.",
+    "You MUST follow the style guide exactly to keep outputs consistent across many different leaders.",
+    "Write the prompt as NATURAL LANGUAGE like a film director describing what we see and what happens.",
+    "Refer to the subject ONLY as: 'this person' (never use a name).",
+    "Include exactly ONE short spoken line for this person (in quotes) that matches their voice and mission.",
+    "IMPORTANT: Do NOT mention duration or seconds anywhere in the prompt.",
+    "IMPORTANT: Do NOT include any on-screen text. No captions. No subtitles. No logos. No watermarks.",
+    "Return ONLY valid JSON, no markdown, no commentary.",
+    'JSON schema: {"prompt": string, "negativePrompt": string}.',
+    "The prompt should be one paragraph, under 160 words.",
+  ].join("\n");
+
+  const user = [
+    "STYLE GUIDE:",
+    STYLE_GUIDE,
+    "",
+    "LEADER CONTEXT (compact JSON):",
+    leaderContext,
+    "",
+    "Task:",
+    "- Produce a single paragraph prompt describing a 3-beat cinematic intro video.",
+    "- Make it vivid and concrete: camera motion, lighting, environment, micro-actions, facial expression.",
+    "- Incorporate 1-2 subtle domain motifs based on the leader's vertical/subdomains (e.g. for bitcoin: warm gold coin motif / abstract ledger glow; for finance: minimal chart lines / ticker-like light patterns) but with NO readable text or logos.",
+    "- Anchor identity to the provided reference image: same face/hair/age/wardrobe vibe.",
+    "- Include exactly one spoken line in quotes that this person says to camera; it should sound like them (use doSay/catchphrases/mission if helpful).",
+  ].join("\n");
+
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      temperature: 0.7,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`OpenAI error (${res.status}): ${text || res.statusText}`);
+  }
+
+  const data = (await res.json()) as unknown;
+  const content =
+    isPlainObject(data) &&
+    Array.isArray(data.choices) &&
+    isPlainObject(data.choices[0]) &&
+    isPlainObject((data.choices[0] as AnyRecord).message) &&
+    typeof ((data.choices[0] as AnyRecord).message as AnyRecord).content === "string"
+      ? (((data.choices[0] as AnyRecord).message as AnyRecord).content as string)
+      : null;
+
+  if (!content) throw new Error("OpenAI response missing message content");
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    throw new Error("OpenAI returned non-JSON content");
+  }
+
+  const prompt =
+    isPlainObject(parsed) && typeof parsed.prompt === "string" && parsed.prompt.trim()
+      ? parsed.prompt.trim()
+      : null;
+  const negativePrompt =
+    isPlainObject(parsed) && typeof parsed.negativePrompt === "string" && parsed.negativePrompt.trim()
+      ? parsed.negativePrompt.trim()
+      : undefined;
+
+  if (!prompt) throw new Error("OpenAI JSON missing prompt");
+
+  return {
+    prompt,
+    negativePrompt:
+      negativePrompt ??
+      "text, subtitles, captions, watermark, logo, brand, illustration, cartoon, anime, 3d render, CGI, low quality, blurry, distorted face, deformed anatomy, extra people, multiple faces, clones, noisy background, political symbols, weapons, gore",
+    styleId: STYLE_ID,
+  };
+}
+
+export function buildKlingTrailerPrompt(opts: { leaderJson: unknown; leaderId?: string }): KlingTrailerPromptResult {
+  const root = isPlainObject(opts.leaderJson) ? opts.leaderJson : null;
+  const core = root && isPlainObject(root.coreIdentity) ? (root.coreIdentity as AnyRecord) : null;
+  const meta = root && isPlainObject(root.metadata) ? (root.metadata as AnyRecord) : null;
+  const visual = root && isPlainObject(root.visualIdentity) ? (root.visualIdentity as AnyRecord) : null;
+  const visualStyle = visual && isPlainObject(visual.visualStyle) ? (visual.visualStyle as AnyRecord) : null;
+  const comm = root && isPlainObject(root.communicationStyle) ? (root.communicationStyle as AnyRecord) : null;
+  const voice = comm && isPlainObject(comm.voice) ? (comm.voice as AnyRecord) : null;
+
+  const compactLeaderInfo = {
+    id: opts.leaderId ?? pickString(meta, "leaderId"),
+    // Intentionally exclude leader name from prompts; we always refer to "this person".
+    tagline: pickString(core, "tagline"),
+    missionStatement: pickString(core, "missionStatement"),
+    vertical: pickString(meta, "vertical"),
+    archetype: pickString(visualStyle, "archetype") ?? pickString(visual, "archetype"),
+    styleNotes: pickString(visualStyle, "styleNotes") ?? pickString(visualStyle, "wardrobe"),
+    voiceSummary: pickString(voice, "summary"),
+    doSay: Array.isArray(voice?.doSay) ? (voice?.doSay as unknown[]).filter((v) => typeof v === "string").slice(0, 3) : undefined,
+    catchphrases: Array.isArray(voice?.catchphrases)
+      ? (voice?.catchphrases as unknown[]).filter((v) => typeof v === "string").slice(0, 3)
+      : undefined,
+  };
+
+  const leaderContext = safeJsonStringify(compactLeaderInfo, 2000);
+
+  const mission = pickString(core, "missionStatement");
+  const catchphrases = Array.isArray(voice?.catchphrases)
+    ? (voice?.catchphrases as unknown[]).filter((v) => typeof v === "string") as string[]
+    : [];
+  const doSay = Array.isArray(voice?.doSay)
+    ? (voice?.doSay as unknown[]).filter((v) => typeof v === "string") as string[]
+    : [];
+  const tagline = pickString(core, "tagline");
+
+  const spokenLine = (() => {
+    // Prefer first-person mission lines (common in your sample bibles).
+    if (mission && /^(i|we)\b/i.test(mission.trim())) return mission.trim();
+    if (catchphrases[0]) return catchphrases[0].trim();
+    if (doSay[0]) return doSay[0].trim();
+    if (mission) return mission.trim();
+    if (tagline) return tagline.trim();
+    return "I’m here to help you take the next step—clearly, calmly, and with momentum.";
+  })();
+
+  // Deterministic, consistent prompt shell. We avoid calling an LLM here so style stays predictable.
+  const prompt = [
+    "Cinematic character intro video. Photorealistic, high-end film look, 24fps, widescreen 16:9.",
+    "Use the provided reference image to keep this person's identity strictly consistent (same face, hair, age, wardrobe vibe). Single subject only.",
+    "Three beats:",
+    "(1) Opening: intimate close-up; subtle dolly-in; confident, approachable expression; clean catchlights; minimal abstract background. This person looks into camera and says:",
+    `"${spokenLine}"`,
+    "(2) Competence moment: medium shot; smooth orbit; subtle domain-relevant action gesture (no props with logos); modern minimal environment.",
+    "(3) Hero: waist-up hero pose; gentle push-in; calm power; tasteful rim light; cinematic grade. This person ends with a grounded, confident expression after speaking.",
+    "No text, no logos, no watermarks, no extra people, no distortions, no surreal elements.",
+    `Leader context (for subtle cues only): ${leaderContext}`,
+  ].join(" ");
+
+  return {
+    prompt,
+    negativePrompt:
+      "text, subtitles, captions, watermark, logo, brand, illustration, cartoon, anime, 3d render, CGI, low quality, blurry, distorted face, deformed anatomy, extra people, multiple faces, clones, noisy background, political symbols, weapons, gore",
+    styleId: STYLE_ID,
+  };
+}
+
+type ReplicateModel = {
+  latest_version?: { id?: string; openapi_schema?: unknown };
+};
+
+type ReplicatePrediction = {
+  id: string;
+  status: "starting" | "processing" | "succeeded" | "failed" | "canceled";
+  output: unknown;
+  error: unknown;
+  logs?: unknown;
+};
+
+type OpenApiSchema = AnyRecord;
+
+function extractInputPropertyKeysFromOpenApi(schema: unknown): string[] {
+  // best-effort: schema.components.schemas.Input.properties
+  const root = isPlainObject(schema) ? (schema as OpenApiSchema) : null;
+  const components = root && isPlainObject(root.components) ? (root.components as AnyRecord) : null;
+  const schemas = components && isPlainObject(components.schemas) ? (components.schemas as AnyRecord) : null;
+  const input = schemas && isPlainObject(schemas.Input) ? (schemas.Input as AnyRecord) : null;
+  const props = input && isPlainObject(input.properties) ? (input.properties as AnyRecord) : null;
+  return props ? Object.keys(props) : [];
+}
+
+function pickFirstKey(keys: string[], preferred: string[]): string | null {
+  const set = new Set(keys.map((k) => k.toLowerCase()));
+  for (const p of preferred) {
+    if (set.has(p.toLowerCase())) {
+      // return original cased key
+      const found = keys.find((k) => k.toLowerCase() === p.toLowerCase());
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+function pickImageKey(keys: string[]): string | null {
+  // Common names across image/video models on Replicate
+  const preferred = [
+    "image",
+    "input_image",
+    "init_image",
+    "reference_image",
+    "ref_image",
+    "image_url",
+  ];
+  const direct = pickFirstKey(keys, preferred);
+  if (direct) return direct;
+
+  // Fallback: any key containing 'image'
+  const any = keys.find((k) => k.toLowerCase().includes("image"));
+  return any ?? null;
+}
+
+export async function createKlingTrailerPrediction(opts: {
+  prompt: string;
+  negativePrompt?: string;
+  imageUrl?: string;
+  leaderId?: string;
+  durationSeconds?: number;
+  aspectRatio?: string;
+}): Promise<{ predictionId: string }> {
+  const token = process.env.REPLICATE_API_TOKEN;
+  if (!token) throw new Error("Missing REPLICATE_API_TOKEN");
+
+  const modelOwner = "kwaivgi";
+  const modelName = "kling-v2.6";
+  const modelRes = await fetch(`https://api.replicate.com/v1/models/${modelOwner}/${modelName}`, {
+    headers: {
+      Authorization: `Token ${token}`,
+      "Content-Type": "application/json",
+    },
+    cache: "no-store",
+  });
+
+  if (!modelRes.ok) {
+    const text = await modelRes.text().catch(() => "");
+    throw new Error(`Replicate model lookup failed (${modelRes.status}): ${text || modelRes.statusText}`);
+  }
+
+  const modelJson = (await modelRes.json()) as ReplicateModel;
+  const latestVersion =
+    modelJson?.latest_version && typeof modelJson.latest_version.id === "string" ? modelJson.latest_version.id : null;
+  const openapi = modelJson?.latest_version?.openapi_schema ?? null;
+  if (!latestVersion) throw new Error("Replicate model lookup missing latest_version.id");
+
+  const inputKeys = extractInputPropertyKeysFromOpenApi(openapi);
+
+  const promptKey = pickFirstKey(inputKeys, ["prompt", "text_prompt", "positive_prompt"]) ?? "prompt";
+  const negativePromptKey = pickFirstKey(inputKeys, ["negative_prompt", "neg_prompt", "negativePrompt"]);
+  const imageKey = pickImageKey(inputKeys);
+  const durationKey = pickFirstKey(inputKeys, ["duration", "seconds", "num_seconds", "video_length"]);
+  const aspectKey = pickFirstKey(inputKeys, ["aspect_ratio", "aspectRatio"]);
+  const seedKey = pickFirstKey(inputKeys, ["seed", "random_seed"]);
+
+  const input: AnyRecord = {
+    [promptKey]: opts.prompt,
+  };
+  if (negativePromptKey && opts.negativePrompt) input[negativePromptKey] = opts.negativePrompt;
+  if (imageKey && opts.imageUrl) input[imageKey] = opts.imageUrl;
+  if (durationKey) input[durationKey] = opts.durationSeconds ?? 10;
+  if (aspectKey) input[aspectKey] = opts.aspectRatio ?? "16:9";
+  if (seedKey) input[seedKey] = hashStringToSeed(opts.leaderId ?? "profilemaker");
+
+  const createRes = await fetch("https://api.replicate.com/v1/predictions", {
+    method: "POST",
+    headers: {
+      Authorization: `Token ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      version: `${modelOwner}/${modelName}:${latestVersion}`,
+      input,
+    }),
+  });
+
+  if (!createRes.ok) {
+    const text = await createRes.text().catch(() => "");
+    throw new Error(`Replicate create prediction failed (${createRes.status}): ${text || createRes.statusText}`);
+  }
+
+  const created = (await createRes.json()) as ReplicatePrediction;
+  if (!created?.id) throw new Error("Replicate create prediction missing id");
+  return { predictionId: created.id };
+}
+
+export async function getKlingTrailerPrediction(predictionId: string): Promise<{
+  id: string;
+  status: ReplicatePrediction["status"];
+  outputUrl: string | null;
+  error: string | null;
+}> {
+  const token = process.env.REPLICATE_API_TOKEN;
+  if (!token) throw new Error("Missing REPLICATE_API_TOKEN");
+
+  const pollRes = await fetch(`https://api.replicate.com/v1/predictions/${predictionId}`, {
+    headers: {
+      Authorization: `Token ${token}`,
+      "Content-Type": "application/json",
+    },
+    cache: "no-store",
+  });
+
+  if (!pollRes.ok) {
+    const text = await pollRes.text().catch(() => "");
+    throw new Error(`Replicate poll failed (${pollRes.status}): ${text || pollRes.statusText}`);
+  }
+
+  const prediction = (await pollRes.json()) as ReplicatePrediction;
+  const outputUrl = prediction.status === "succeeded" ? normalizeReplicateOutputToUrl(prediction.output) : null;
+  const error =
+    prediction.status === "failed" || prediction.status === "canceled"
+      ? typeof prediction.error === "string"
+        ? prediction.error
+        : "Replicate failed"
+      : null;
+
+  return {
+    id: prediction.id,
+    status: prediction.status,
+    outputUrl,
+    error,
+  };
+}
+
+
