@@ -37,6 +37,79 @@ const STYLE_ID = "pmk.avatar.v2";
 const NEGATIVE_PROMPT = "illustration, cartoon, anime, 3d render, CGI, painterly, stylized, unrealistic skin, beauty filter, overprocessed, text, watermark, logo, signature, blurry, low quality, extra faces, extra heads, cropped head, out of frame, distorted anatomy, deformed hands, nsfw";
 
 /**
+ * Builds a varied prompt with randomized features for regeneration
+ */
+function buildVariedPrompt(opts: {
+  ethnicity?: string;
+  genderPresentation?: string;
+  apparentAge?: string;
+  hairColor: string;
+  hairStyle: string;
+  hairLength: string;
+  eyeColor: string;
+  facialFeatures: string;
+  expression: string;
+  attire: string;
+  buildBodyType?: string;
+}): string {
+  const parts: string[] = [];
+
+  // Core subject
+  parts.push("Professional photorealistic studio headshot");
+
+  // Build gender term
+  const genderTerm = opts.genderPresentation?.toLowerCase() === "male" ? "man"
+    : opts.genderPresentation?.toLowerCase() === "female" ? "woman"
+    : "person";
+
+  // Physical appearance with ethnicity
+  if (opts.ethnicity && opts.apparentAge) {
+    parts.push(`${opts.ethnicity} ${genderTerm} in their ${opts.apparentAge.toLowerCase().replace("early ", "early-").replace("late ", "late-").replace("mid ", "mid-")}`);
+  } else if (opts.apparentAge) {
+    parts.push(`${genderTerm} in their ${opts.apparentAge.toLowerCase()}`);
+  } else if (opts.ethnicity) {
+    parts.push(`${opts.ethnicity} ${genderTerm}`);
+  } else {
+    parts.push(genderTerm);
+  }
+
+  // Build type
+  if (opts.buildBodyType) {
+    parts.push(opts.buildBodyType.toLowerCase());
+  }
+
+  // Hair with full variation
+  parts.push(`${opts.hairColor} ${opts.hairLength} ${opts.hairStyle} hair`);
+
+  // Eyes
+  parts.push(`${opts.eyeColor} eyes`);
+
+  // Facial features
+  parts.push(opts.facialFeatures);
+
+  // Attire
+  parts.push(`wearing ${opts.attire}`);
+
+  // Expression
+  parts.push(opts.expression);
+
+  // Technical specs
+  parts.push("85mm portrait lens");
+  parts.push("soft key light with subtle rim light");
+  parts.push("clean neutral gray gradient background");
+  parts.push("head and shoulders framing");
+  parts.push("looking at camera");
+  parts.push("high detail");
+  parts.push("natural skin texture");
+  parts.push("photorealistic");
+
+  // Add unique seed instruction for variety
+  parts.push(`variation seed ${Math.floor(Math.random() * 1000000)}`);
+
+  return parts.join(", ");
+}
+
+/**
  * Extracts visual attributes from the Leader Bible schema and builds a structured prompt
  * for Nano Banana image generation.
  */
@@ -79,18 +152,75 @@ function buildVisualAttributesPrompt(opts: {
     : [];
   const accentColor = primaryColors[0]?.name || primaryColors[0]?.hex;
 
-  // When regenerating, add variation while keeping ethnicity/gender consistent
+  // When regenerating, add significant variation while keeping ethnicity/gender consistent
   if (isRegeneration) {
-    // Randomize hair color/style for variety
-    const hairColors = ["black", "dark brown", "brown", "light brown", "auburn", "blonde", "gray", "salt and pepper"];
-    const hairStyles = ["straight", "wavy", "curly", "slicked back", "messy", "styled", "natural"];
-    const hairLengths = ["short", "medium", "long", "shoulder-length"];
-    const eyeColors = ["brown", "dark brown", "hazel", "blue", "green", "amber"];
+    // Randomize hair for major variety
+    const hairColors = [
+      "jet black", "dark brown", "chestnut brown", "light brown", "honey blonde",
+      "platinum blonde", "auburn", "copper red", "silver gray", "salt and pepper",
+      "ash brown", "caramel", "mahogany"
+    ];
+    const hairStyles = [
+      "straight", "wavy", "tightly curled", "loosely curled", "slicked back",
+      "messy textured", "swept side", "pompadour", "undercut", "buzzed short",
+      "flowing", "layered", "choppy", "sleek"
+    ];
+    const hairLengths = [
+      "very short cropped", "short", "medium length", "long flowing",
+      "shoulder-length", "chin-length", "buzz cut"
+    ];
+
+    // Diverse eye colors
+    const eyeColors = [
+      "deep brown", "dark brown", "light brown", "amber", "hazel with green flecks",
+      "blue-gray", "steel blue", "green", "dark green", "honey brown"
+    ];
+
+    // Vary facial features for more distinction
+    const facialFeatureVariations = [
+      "defined cheekbones with angular jawline",
+      "soft rounded features with warm expression",
+      "sharp defined features with prominent brow",
+      "delicate refined features",
+      "strong structured bone structure",
+      "gentle features with kind eyes",
+      "distinctive prominent features",
+      "symmetrical balanced features"
+    ];
+
+    // Vary expressions and mood
+    const expressions = [
+      "confident warm smile", "serious professional demeanor", "thoughtful contemplative look",
+      "friendly approachable smile", "intense focused gaze", "calm serene expression",
+      "energetic enthusiastic expression", "wise knowing look"
+    ];
+
+    // Vary attire for additional distinction
+    const attireOptions = [
+      "crisp business attire", "casual modern clothing", "smart casual outfit",
+      "professional blazer", "relaxed stylish wear", "contemporary fashion",
+      "classic tailored clothing", "minimalist modern style"
+    ];
 
     hairColor = hairColors[Math.floor(Math.random() * hairColors.length)];
     hairStyle = hairStyles[Math.floor(Math.random() * hairStyles.length)];
     hairLength = hairLengths[Math.floor(Math.random() * hairLengths.length)];
     eyeColor = eyeColors[Math.floor(Math.random() * eyeColors.length)];
+
+    // Override original features with variations
+    return buildVariedPrompt({
+      ethnicity,
+      genderPresentation,
+      apparentAge,
+      hairColor,
+      hairStyle,
+      hairLength,
+      eyeColor,
+      facialFeatures: facialFeatureVariations[Math.floor(Math.random() * facialFeatureVariations.length)],
+      expression: expressions[Math.floor(Math.random() * expressions.length)],
+      attire: attireOptions[Math.floor(Math.random() * attireOptions.length)],
+      buildBodyType
+    });
   }
   
   // Build the structured prompt parts
