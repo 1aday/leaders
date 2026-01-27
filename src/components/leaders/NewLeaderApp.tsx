@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn, calculateCompositeScore } from "@/lib/utils";
@@ -168,6 +169,7 @@ export function NewLeaderApp() {
   const [generating, setGenerating] = React.useState(false);
   const [generatingMode, setGeneratingMode] = React.useState<"random" | "custom" | null>(null);
   const [genError, setGenError] = React.useState<string | null>(null);
+  const [genProgress, setGenProgress] = React.useState(0);
   const [previewTab, setPreviewTab] = React.useState<"overview" | "json">("overview");
   const [editingJson, setEditingJson] = React.useState(false);
 
@@ -229,11 +231,13 @@ export function NewLeaderApp() {
 
   const handleGenerate = React.useCallback(async (forceRandom = false) => {
     setGenError(null);
+    setGenProgress(0);
     const name = forceRandom ? "" : genName.trim();
     const description = forceRandom ? "" : genDescription.trim();
 
     setGenerating(true);
     setGeneratingMode(forceRandom ? "random" : "custom");
+
     try {
       const res = await fetch("/api/leader/generate", {
         method: "POST",
@@ -241,27 +245,67 @@ export function NewLeaderApp() {
         body: JSON.stringify({ name, description }),
       });
 
-      const data = (await res.json()) as unknown;
       if (!res.ok) {
-        const msg =
-          data && typeof data === "object" && "error" in data && typeof (data as { error: unknown }).error === "string"
-            ? (data as { error: string }).error
-            : "Leader generation failed";
-        throw new Error(msg);
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
       }
 
-      const leader =
-        data && typeof data === "object" && "leader" in data ? (data as { leader: unknown }).leader : null;
-      if (!leader) throw new Error("API returned no leader JSON");
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("No response body");
 
-      setRaw(JSON.stringify(leader, null, 2));
-      setShowGenerator(false);
-      setShowTextarea(false);
-      setPreviewTab("json");
-      setEditingJson(false);
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        // SSE messages are separated by double newlines
+        const messages = buffer.split("\n\n");
+        // Keep the last incomplete message in the buffer
+        buffer = messages.pop() || "";
+
+        for (const message of messages) {
+          const lines = message.split("\n");
+          for (const line of lines) {
+            if (!line.trim()) continue;
+
+            // SSE data lines start with "data: "
+            if (line.startsWith("data: ")) {
+              const jsonStr = line.substring(6).trim();
+              if (!jsonStr) continue;
+
+              try {
+                const json = JSON.parse(jsonStr) as { type: string; percentage?: number; leader?: unknown; error?: string };
+
+                if (json.type === "progress") {
+                  setGenProgress(json.percentage || 0);
+                } else if (json.type === "complete") {
+                  const leader = json.leader;
+                  if (!leader) throw new Error("API returned no leader JSON");
+
+                  setRaw(JSON.stringify(leader, null, 2));
+                  setShowGenerator(false);
+                  setShowTextarea(false);
+                  setPreviewTab("json");
+                  setEditingJson(false);
+                  setGenProgress(100);
+                  return;
+                } else if (json.type === "error") {
+                  throw new Error(json.error || "Unknown error");
+                }
+              } catch (parseError) {
+                console.warn("Failed to parse SSE message:", jsonStr, parseError);
+              }
+            }
+          }
+        }
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Unknown error";
       setGenError(msg);
+      setGenProgress(0);
     } finally {
       setGenerating(false);
       setGeneratingMode(null);
@@ -500,7 +544,7 @@ export function NewLeaderApp() {
                           {generatingMode === "random" ? (
                             <>
                               <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground/30 border-t-primary-foreground" />
-                              Generating...
+                              {genProgress > 0 ? `${genProgress}%` : "Generating..."}
                             </>
                           ) : (
                             <>
@@ -510,6 +554,15 @@ export function NewLeaderApp() {
                           )}
                         </Button>
                       </div>
+                      {generatingMode === "random" && genProgress > 0 && (
+                        <div className="mt-3 space-y-2">
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">Generating...</span>
+                            <span className="font-medium tabular-nums text-foreground">{genProgress}%</span>
+                          </div>
+                          <Progress value={genProgress} className="h-2" />
+                        </div>
+                      )}
                     </div>
 
                     <div className="relative flex items-center py-2">
@@ -565,7 +618,7 @@ export function NewLeaderApp() {
                         {generatingMode === "custom" ? (
                           <>
                             <div className="h-4 w-4 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground" />
-                            Generating...
+                            {genProgress > 0 ? `${genProgress}%` : "Generating..."}
                           </>
                         ) : (
                           <>
@@ -583,6 +636,15 @@ export function NewLeaderApp() {
                         Load sample instead
                       </Button>
                     </div>
+                    {generating && genProgress > 0 && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">Generating Leader Bible...</span>
+                          <span className="font-medium tabular-nums text-foreground">{genProgress}%</span>
+                        </div>
+                        <Progress value={genProgress} className="h-2" />
+                      </div>
+                    )}
                     {genError && <p className="text-sm text-destructive">{genError}</p>}
                     <p className="text-xs text-muted-foreground">
                       Uses OpenAI Structured Outputs to generate a complete Leader Bible JSON.
