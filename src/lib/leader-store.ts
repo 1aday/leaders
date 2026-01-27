@@ -51,11 +51,7 @@ export function deriveLeaderSummary(parsed: unknown, rawJson: string): Omit<Lead
   const visual = root && isPlainObject(root.visualIdentity) ? (root.visualIdentity as Record<string, unknown>) : null;
   const imagePrompts = visual && isPlainObject(visual.imagePrompts) ? (visual.imagePrompts as Record<string, unknown>) : null;
   const primaryImage = imagePrompts && isPlainObject(imagePrompts.primary) ? (imagePrompts.primary as Record<string, unknown>) : null;
-  
-  // Also check for direct URLs in asset registry
-  const assets = root && isPlainObject(root.assetRegistry) ? (root.assetRegistry as Record<string, unknown>) : null;
-  const images = assets && Array.isArray(assets.images) ? assets.images : [];
-  
+
   // Get leaderId, normalize if needed (replace spaces with hyphens, uppercase)
   let id = getString(metadata, "leaderId");
   if (id) {
@@ -88,11 +84,10 @@ export function deriveLeaderSummary(parsed: unknown, rawJson: string): Omit<Lead
     return url.includes("placeholder.example.com") || url.includes("example.com/");
   };
   
-  const rawProfilePicUrl = getString(primaryImage, "url") 
+  const rawProfilePicUrl = getString(primaryImage, "url")
     ?? getString(visual, "profilePicUrl")
-    ?? getString(core, "profilePicUrl")
-    ?? (images[0] && typeof images[0] === "object" && "url" in (images[0] as object) ? (images[0] as { url: string }).url : undefined);
-  
+    ?? getString(core, "profilePicUrl");
+
   const profilePicUrl = isPlaceholderUrl(rawProfilePicUrl) ? undefined : rawProfilePicUrl;
 
   // Extract expertise domain and derive display label

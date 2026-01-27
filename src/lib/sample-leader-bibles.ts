@@ -1,5 +1,5 @@
 /**
- * Seed dataset: 20 fictional “Leader Bible v1.0” JSON objects.
+ * Seed dataset: 20 fictional "Leader Bible v1.0" JSON objects.
  *
  * Goal: every character has a *full* schema so the profile page is rich (lots of sections/tabs),
  * not just a name + tagline.
@@ -13,6 +13,8 @@
  *   - welcome video: `videoIdentity.videoPrompts.standard.url` OR `videoIdentity.welcomeVideoUrl` OR `coreIdentity.welcomeVideoUrl`
  */
 
+import { calculateCompositeScore } from "./utils";
+
 type SeedLeader = {
   id: string;
   name: string;
@@ -20,7 +22,7 @@ type SeedLeader = {
   vertical: string;
   subDomains: string[];
   tier: "Elite" | "Exceptional" | "Strong" | "Developing";
-  compositeScore: number;
+  // compositeScore is now calculated dynamically using Leaders.ai formula
   character: number;
   competence: number;
   impact: number;
@@ -57,6 +59,12 @@ function isoNow() {
 }
 
 function makeLeaderBible(s: SeedLeader) {
+  // Calculate composite score using Leaders.ai 3-pillar weighted formula
+  // Achievement = (Character × 0.39) + (Competence × 0.30) + (Impact × 0.31)
+  // Final = Achievement × Jobs Rule Multiplier (0.94 for sample leaders)
+  const jobsRuleMultiplier = 0.94;
+  const compositeScore = calculateCompositeScore(s.character, s.competence, s.impact, jobsRuleMultiplier) ?? 0;
+
   return {
     $schema: "https://nodewizards.com/schemas/leader-bible-v1.0.json",
     metadata: {
@@ -72,8 +80,8 @@ function makeLeaderBible(s: SeedLeader) {
         character: s.character,
         competence: s.competence,
         impact: s.impact,
-        jobsRuleMultiplier: 0.94,
-        compositeScore: s.compositeScore,
+        jobsRuleMultiplier,
+        compositeScore,
         tier: s.tier,
       },
       tags: ["seed", "fictional", "leader-bible-v1"],
@@ -211,12 +219,6 @@ function makeLeaderBible(s: SeedLeader) {
       callsToAction: ["Save this", "Try this for 7 days", "Reply with your constraints", "DM 'PLAN' for the template"],
     },
 
-    assetRegistry: {
-      images: [{ id: "profile", type: "profile", url: s.avatarUrl, usage: "avatar" }],
-      videos: [{ id: "welcome", type: "welcome", url: s.welcomeVideoUrl, usage: "intro" }],
-      links: [{ label: "Website", url: "https://example.com" }],
-    },
-
     knowledgeBase: {
       keyConcepts: ["Compounding", "Systems", "Constraints", "Feedback loops", "Focus"],
       recommendedResources: [
@@ -235,7 +237,6 @@ export const SAMPLE_LEADER_BIBLES = [
     vertical: "Finance",
     subDomains: ["Education", "Investing", "Sovereignty", "Security", "Macro"],
     tier: "Exceptional",
-    compositeScore: 86,
     character: 92,
     competence: 95,
     impact: 90,
@@ -285,7 +286,6 @@ export const SAMPLE_LEADER_BIBLES = [
     vertical: "Personal Development",
     subDomains: ["Discipline", "Fitness", "Mindset", "Ambition", "Routines"],
     tier: "Strong",
-    compositeScore: 73,
     character: 72,
     competence: 84,
     impact: 80,
@@ -335,7 +335,6 @@ export const SAMPLE_LEADER_BIBLES = [
     vertical: "Design",
     subDomains: ["UX", "Research", "Accessibility", "Systems", "Product"],
     tier: "Exceptional",
-    compositeScore: 83,
     character: 90,
     competence: 92,
     impact: 83,
@@ -384,7 +383,6 @@ export const SAMPLE_LEADER_BIBLES = [
     vertical: "AI / Engineering",
     subDomains: ["LLMs", "Agents", "Evaluation", "Reliability", "Tooling"],
     tier: "Exceptional",
-    compositeScore: 84,
     character: 86,
     competence: 94,
     impact: 88,
@@ -433,7 +431,6 @@ export const SAMPLE_LEADER_BIBLES = [
     vertical: "Food",
     subDomains: ["Home cooking", "Meal prep", "Budget meals", "Nutrition basics"],
     tier: "Strong",
-    compositeScore: 81,
     character: 93,
     competence: 86,
     impact: 78,
@@ -482,7 +479,6 @@ export const SAMPLE_LEADER_BIBLES = [
     vertical: "Creator Economy",
     subDomains: ["Video", "Shorts", "Storytelling", "Editing", "Distribution"],
     tier: "Exceptional",
-    compositeScore: 80,
     character: 82,
     competence: 89,
     impact: 85,
@@ -532,7 +528,6 @@ export const SAMPLE_LEADER_BIBLES = [
     vertical: "Operations",
     subDomains: ["Systems", "Process", "KPIs", "Hiring", "Execution"],
     tier: "Exceptional",
-    compositeScore: 82,
     character: 88,
     competence: 90,
     impact: 82,
@@ -554,7 +549,6 @@ export const SAMPLE_LEADER_BIBLES = [
     vertical: "Health",
     subDomains: ["Sleep", "Recovery", "Stress", "Habits", "Movement"],
     tier: "Strong",
-    compositeScore: 81,
     character: 92,
     competence: 85,
     impact: 80,
@@ -576,7 +570,6 @@ export const SAMPLE_LEADER_BIBLES = [
     vertical: "Sales",
     subDomains: ["Outbound", "Discovery", "Messaging", "Negotiation", "Pipeline"],
     tier: "Strong",
-    compositeScore: 78,
     character: 78,
     competence: 90,
     impact: 84,
@@ -598,7 +591,6 @@ export const SAMPLE_LEADER_BIBLES = [
     vertical: "Marketing",
     subDomains: ["Growth", "Experimentation", "Funnels", "Lifecycle", "Copy"],
     tier: "Exceptional",
-    compositeScore: 83,
     character: 86,
     competence: 91,
     impact: 86,
@@ -620,7 +612,6 @@ export const SAMPLE_LEADER_BIBLES = [
     vertical: "Fitness",
     subDomains: ["Strength", "Mobility", "Nutrition", "Consistency", "Recovery"],
     tier: "Strong",
-    compositeScore: 80,
     character: 84,
     competence: 88,
     impact: 82,
@@ -642,7 +633,6 @@ export const SAMPLE_LEADER_BIBLES = [
     vertical: "Security",
     subDomains: ["AppSec", "Threat modeling", "Secure coding", "Incidents", "Cloud"],
     tier: "Exceptional",
-    compositeScore: 84,
     character: 88,
     competence: 93,
     impact: 86,
@@ -664,7 +654,6 @@ export const SAMPLE_LEADER_BIBLES = [
     vertical: "Writing",
     subDomains: ["Essays", "Newsletters", "Editing", "Clarity", "Story"],
     tier: "Exceptional",
-    compositeScore: 81,
     character: 91,
     competence: 87,
     impact: 80,
@@ -686,7 +675,6 @@ export const SAMPLE_LEADER_BIBLES = [
     vertical: "Startups",
     subDomains: ["MVP", "Shipping", "Feedback", "Product", "Execution"],
     tier: "Exceptional",
-    compositeScore: 83,
     character: 85,
     competence: 92,
     impact: 87,
@@ -708,7 +696,6 @@ export const SAMPLE_LEADER_BIBLES = [
     vertical: "Finance",
     subDomains: ["Budgeting", "Debt", "Investing", "Simplicity", "Habits"],
     tier: "Strong",
-    compositeScore: 79,
     character: 90,
     competence: 84,
     impact: 78,
@@ -731,7 +718,6 @@ export const SAMPLE_LEADER_BIBLES = [
     vertical: "Macro",
     subDomains: ["Rates", "Inflation", "Liquidity", "Markets", "Risk"],
     tier: "Exceptional",
-    compositeScore: 80,
     character: 83,
     competence: 91,
     impact: 82,
@@ -753,7 +739,6 @@ export const SAMPLE_LEADER_BIBLES = [
     vertical: "Career",
     subDomains: ["Interviews", "Negotiation", "Portfolio", "Confidence", "Story"],
     tier: "Exceptional",
-    compositeScore: 83,
     character: 92,
     competence: 88,
     impact: 82,
@@ -775,7 +760,6 @@ export const SAMPLE_LEADER_BIBLES = [
     vertical: "Investing",
     subDomains: ["Long-term", "Valuation", "Risk", "Behavior", "Portfolio"],
     tier: "Exceptional",
-    compositeScore: 80,
     character: 86,
     competence: 90,
     impact: 80,
@@ -797,7 +781,6 @@ export const SAMPLE_LEADER_BIBLES = [
     vertical: "Travel",
     subDomains: ["Budget travel", "Itineraries", "Culture", "Safety", "Packing"],
     tier: "Strong",
-    compositeScore: 78,
     character: 90,
     competence: 82,
     impact: 76,
@@ -819,7 +802,6 @@ export const SAMPLE_LEADER_BIBLES = [
     vertical: "Music",
     subDomains: ["Practice", "Theory", "Creativity", "Performance", "Ear training"],
     tier: "Strong",
-    compositeScore: 80,
     character: 89,
     competence: 86,
     impact: 78,
@@ -841,7 +823,6 @@ export const SAMPLE_LEADER_BIBLES = [
     vertical: "Education",
     subDomains: ["Learning", "Notes", "Memory", "Study systems", "Focus"],
     tier: "Exceptional",
-    compositeScore: 84,
     character: 92,
     competence: 89,
     impact: 84,

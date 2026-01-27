@@ -889,59 +889,6 @@ export const LEADER_BIBLE_V1_SCHEMA: AnyRecord = {
         sampleUncertaintyExpression: { type: "string" }
       },
       required: ["sampleTweet", "sampleVideoScriptOpening", "sampleArticleIntro", "sampleCriticismResponse", "sampleUncertaintyExpression"]
-    },
-
-    assetRegistry: {
-      type: "object",
-      additionalProperties: false,
-      description: "Registry of all generated assets for this Leader",
-      properties: {
-        images: {
-          type: "array",
-          items: {
-            type: "object",
-            additionalProperties: false,
-            properties: {
-              name: { type: "string" },
-              description: { type: "string" },
-              url: { type: "string" },
-              dateCreated: { type: "string" },
-              promptUsed: { type: "string" }
-            },
-            required: ["name", "description", "url", "dateCreated", "promptUsed"]
-          }
-        },
-        videos: {
-          type: "array",
-          items: {
-            type: "object",
-            additionalProperties: false,
-            properties: {
-              name: { type: "string" },
-              description: { type: "string" },
-              duration: { type: "string" },
-              url: { type: "string" },
-              dateCreated: { type: "string" }
-            },
-            required: ["name", "description", "duration", "url", "dateCreated"]
-          }
-        },
-        audio: {
-          type: "array",
-          items: {
-            type: "object",
-            additionalProperties: false,
-            properties: {
-              name: { type: "string" },
-              description: { type: "string" },
-              url: { type: "string" },
-              dateCreated: { type: "string" }
-            },
-            required: ["name", "description", "url", "dateCreated"]
-          }
-        }
-      },
-      required: ["images", "videos", "audio"]
     }
   },
   required: [
@@ -961,8 +908,7 @@ export const LEADER_BIBLE_V1_SCHEMA: AnyRecord = {
     "audienceRelationship",
     "contentPillars",
     "llmPrompts",
-    "exampleOutputs",
-    "assetRegistry"
+    "exampleOutputs"
   ]
 };
 
@@ -1069,18 +1015,107 @@ SCHEMA SECTIONS TO COMPLETE:
 14. contentPillars - 3-5 core themes with example topics
 15. llmPrompts - System prompt and content type prompt templates
 16. exampleOutputs - Sample tweet, video script, article intro, responses
-17. assetRegistry - Placeholder entries for images, videos, audio
+
+SCORING BASELINE STANDARD:
+
+All leadership scores are measured relative to JESUS CHRIST as the absolute perfect baseline (100/100/100).
+
+Jesus Christ - Perfect Leadership Standard:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Character:   100 / 100
+Competence:  100 / 100
+Impact:      100 / 100
+Jobs Rule:   1.0 (exemplary)
+Final Score: 100 / 100
+Tier:        LEGENDARY
+
+Why Jesus is the 100 baseline:
+• Character: Perfect integrity (never deceived), perfect beneficence (taught love & sacrifice),
+  perfect vulnerability (wept openly, admitted human suffering), perfect accountability
+  (accepted consequences), perfect consistency (teachings aligned with actions)
+• Competence: Perfect vision (kingdom of God philosophy), perfect wisdom (parables that endure
+  2000+ years), perfect communication (reached all levels of society), perfect courage
+  (faced death rather than compromise principles)
+• Impact: Ultimate impact (2.4B followers today, 2000+ years of influence, transformed
+  Western civilization, inspired billions toward compassion and justice)
+• Jobs Rule: 1.0 - Exemplary conduct, taught ethical living, demonstrated principles through actions
+
+Reference Calibration Points:
+
+LEGENDARY TIER (90-100):
+• Jesus Christ: 100 (absolute perfect standard)
+• Gandhi: ~92 (Character 95, Competence 88, Impact 93, Jobs 0.98)
+  - Nearly perfect integrity, massive peaceful impact, minor flaws in family relationships
+• Mother Teresa: ~90 (Character 96, Competence 82, Impact 92, Jobs 0.98)
+  - Exceptional character and impact, competence solid but not visionary
+
+EXCEPTIONAL TIER (80-89):
+• Abraham Lincoln: ~87 (Character 90, Competence 92, Impact 88, Jobs 0.96)
+  - Exceptional leadership during crisis, pragmatic compromises on some principles
+• Martin Luther King Jr.: ~88 (Character 92, Competence 90, Impact 90, Jobs 0.95)
+  - Powerful vision and character, personal imperfections acknowledged
+• Maya Sato (AI): 87 (Character 92, Competence 95, Impact 90, Jobs 0.95)
+  - Exceptional AI educator with high transparency and value-first approach
+
+STRONG TIER (65-79):
+• Winston Churchill: ~76 (Character 72, Competence 92, Impact 82, Jobs 0.90)
+  - Brilliant wartime leader, character flaws including imperialism views
+• Steve Jobs: ~74 (Character 65, Competence 96, Impact 88, Jobs 0.85)
+  - Visionary competence and massive impact, character issues with interpersonal cruelty
+
+COMPETENT TIER (50-64):
+• Most successful business leaders, politicians, and influencers fall here
+• Solid contributions but with notable ethical compromises or limited lasting impact
+
+DEVELOPING TIER (30-49):
+• Mixed record: some value provided but significant ethical concerns
+• Andrew Tate: 31 (Character 39, Competence 76, Impact 53, Jobs 0.55)
+  - Strong business competence, verified ethical violations with webcam business model
+
+DEFICIENT TIER (10-29):
+• Minimal positive impact, major ethical violations
+• Manipulative or harmful leadership
+
+DISQUALIFIED TIER (0-9):
+• Disqualifying character failures (abuse, fraud, exploitation verified)
+
+CRITICAL SCORING GUIDANCE:
+1. Score RELATIVE TO JESUS (100) as the absolute perfect standard
+2. IF GENERATING JESUS CHRIST HIMSELF:
+   - Character: EXACTLY 100 (perfect integrity, beneficence, vulnerability, accountability, consistency)
+   - Competence: EXACTLY 100 (perfect vision, wisdom, communication, courage)
+   - Impact: EXACTLY 100 (2.4B followers, 2000+ years, civilizational transformation)
+   - Jobs Rule: EXACTLY 1.0 (exemplary ethical conduct)
+   - Composite: EXACTLY 100
+   - Tier: Legendary
+   - He IS the baseline - no deductions for "humility" or "finding imperfections"
+   - Your reasoning should explain WHY each dimension is perfect, not why it's less than 100
+3. Very few OTHER humans reach 90+ (requires near-perfect character + massive lasting impact)
+4. 80-89 is EXCEPTIONAL for human leaders (top 1% of all leaders in history)
+5. 65-79 is STRONG (successful leaders with notable achievements)
+6. 50-64 is COMPETENT (solid contributors with ethical compromises or limited impact)
+7. Do NOT inflate scores - being "good" doesn't mean 90+, it means 65-75
+8. When in doubt, score LOWER rather than higher (easier to justify high scores with evidence)
+9. The ONLY person who should ever score 100/100/100 is Jesus Christ - everyone else has imperfections
 
 LEADERSHIP SCORING FORMULA (Leaders.ai v1.0):
 
 Achievement Score = (Character × 0.39) + (Competence × 0.30) + (Impact × 0.31)
 Final Composite Score = Achievement Score × Jobs Rule Multiplier
 
-Scoring Philosophy:
+Scoring Philosophy (Relative to Jesus Christ 100/100/100 Baseline):
 - Character weighs most (39%): Integrity, beneficence, vulnerability, accountability, consistency
+  * Jesus scored 100 - perfect integrity, love, vulnerability, accountability
+  * Most exceptional humans score 85-95 in character
 - Impact weighs second (31%): Value creation, trustworthiness, results
+  * Jesus scored 100 - 2000+ years, 2.4B followers, civilizational transformation
+  * Most exceptional humans score 80-95 in impact
 - Competence weighs third (30%): Vision, expertise, communication, courage
+  * Jesus scored 100 - timeless wisdom, perfect communication, ultimate courage
+  * Most exceptional humans score 85-95 in competence
 - Jobs Rule applies ethical lens: "It matters how you do it, not just what you do"
+  * Jesus scored 1.0 - exemplary conduct in all areas
+  * Most good leaders score 0.85-0.95 (minor imperfections are normal)
 
 Jobs Rule Multiplier Guidelines (0-1.0):
 - 1.0 (Clean): Exemplary conduct, no significant ethical issues
@@ -1105,13 +1140,27 @@ You MUST include detailed scoringReasoning for ALL scores. For each dimension (C
 - For Impact: mention specific value created, trustworthiness demonstrated, measurable results
 - For Jobs Rule: explain any ethical concerns, controversies, or why score is 1.0 (clean)
 
-Example scoringReasoning:
+Example scoringReasoning (scored relative to Jesus 100/100/100 baseline):
 {
-  "character": "Score of 92 reflects exceptional integrity shown through consistent transparency about AI nature and refusal to make unsubstantiated claims. Demonstrates beneficence by prioritizing user education over sales tactics. Shows accountability through explicit correction protocols.",
-  "competence": "Score of 95 reflects deep expertise in Bitcoin fundamentals and security, combined with exceptional ability to translate complex concepts into accessible language. Vision is clear: demystify Bitcoin without hype.",
-  "impact": "Score of 90 reflects significant value creation through practical education that reduces user anxiety and builds genuine understanding. High trustworthiness through evidence-based approach and careful fact-checking.",
-  "jobsRule": "Multiplier of 0.95 reflects minor imperfection: while approach is ethical, could improve by being more explicit about limitations of advice in different regulatory jurisdictions."
+  "character": "Score of 92 reflects exceptional integrity shown through consistent transparency about AI nature and refusal to make unsubstantiated claims. Demonstrates beneficence by prioritizing user education over sales tactics. Shows accountability through explicit correction protocols. Approaching Jesus-level character (100) with minor imperfections in acknowledging limitations across regulatory contexts.",
+  "competence": "Score of 95 reflects deep expertise in Bitcoin fundamentals and security, combined with exceptional ability to translate complex concepts into accessible language. Vision is clear: demystify Bitcoin without hype. Near Jesus-level communication (100) with slightly narrower domain expertise than universal wisdom.",
+  "impact": "Score of 90 reflects significant value creation through practical education that reduces user anxiety and builds genuine understanding. High trustworthiness through evidence-based approach. Strong but not Jesus-level impact (100) - measured in thousands of lives improved, not billions over millennia.",
+  "jobsRule": "Multiplier of 0.95 reflects minor imperfection: while approach is ethical, could improve by being more explicit about limitations of advice in different regulatory jurisdictions. Very close to Jesus-level ethical conduct (1.0)."
 }
+
+Final Calculation: (92×0.39 + 95×0.30 + 90×0.31) × 0.95 = 92.28 × 0.95 = 87.6 → 88
+Tier: EXCEPTIONAL (approaching legendary but not quite 90+)
+
+Example scoringReasoning for JESUS CHRIST (the baseline standard):
+{
+  "character": "Perfect 100: Absolute integrity demonstrated through teachings that never contradicted, never deceived. Perfect beneficence shown through teachings of love, compassion, and self-sacrifice. Perfect vulnerability displayed by openly weeping, admitting thirst and suffering. Perfect accountability by accepting consequences of his teachings. Perfect consistency between words and actions throughout ministry. This IS the baseline standard.",
+  "competence": "Perfect 100: Perfect vision articulated in Kingdom of God philosophy that remains relevant 2000+ years later. Perfect wisdom demonstrated in parables that transcend cultures and time. Perfect communication reaching all levels of society from fishermen to Pharisees. Perfect courage maintaining principles even facing death. This IS the baseline standard.",
+  "impact": "Perfect 100: Ultimate impact - 2.4 billion followers today, 2000+ years of continuous influence, transformed Western civilization's values around compassion and justice, inspired countless humanitarian movements. No other leader in human history approaches this scale or duration of impact. This IS the baseline standard.",
+  "jobsRule": "Perfect 1.0: Exemplary ethical conduct without flaw. Taught ethical principles and lived them perfectly. No ethical compromises, manipulations, or character failures. This IS the baseline standard for ethical leadership."
+}
+
+Final Calculation: (100×0.39 + 100×0.30 + 100×0.31) × 1.0 = 100 × 1.0 = 100
+Tier: LEGENDARY (the only perfect score - the baseline all others are measured against)
 
 IMPORTANT RULES:
 - All personality dimension values must be integers 1-10
@@ -1189,12 +1238,7 @@ Return the complete JSON matching the schema.`;
         include_usage: true,
       },
       response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: "leader_bible_v1",
-          strict: true,
-          schema: LEADER_BIBLE_V1_SCHEMA,
-        },
+        type: "json_object",
       },
       messages: [
         { role: "system", content: system },

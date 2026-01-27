@@ -436,9 +436,9 @@ function RenderValue({ value, depth = 0 }: { value: unknown; depth?: number }) {
         {scalars.length > 0 && (
           <div className="space-y-2">
             {scalars.map(([k, v]) => (
-              <div key={k} className="flex items-start justify-between gap-4 py-1">
+              <div key={k} className="flex items-start gap-4 py-1">
                 <span className="text-xs text-muted-foreground shrink-0">{titleCase(k)}</span>
-                <span className="text-sm text-foreground/90 text-right">{String(v)}</span>
+                <span className="text-sm text-foreground/90 text-left">{String(v)}</span>
               </div>
             ))}
           </div>
@@ -468,19 +468,14 @@ function extractMediaUrls(parsed: unknown): {
   const video = root && isPlainObject(root.videoIdentity) ? (root.videoIdentity as Record<string, unknown>) : null;
   const videoPrompts = video && isPlainObject(video.videoPrompts) ? (video.videoPrompts as Record<string, unknown>) : null;
   const standardVideo = videoPrompts && isPlainObject(videoPrompts.standard) ? (videoPrompts.standard as Record<string, unknown>) : null;
-  const assets = root && isPlainObject(root.assetRegistry) ? (root.assetRegistry as Record<string, unknown>) : null;
-  const images = assets && Array.isArray(assets.images) ? assets.images : [];
-  const videos = assets && Array.isArray(assets.videos) ? assets.videos : [];
 
-  const profilePicUrl = getString(primaryImage, "url") 
+  const profilePicUrl = getString(primaryImage, "url")
     ?? getString(visual, "profilePicUrl")
-    ?? getString(core, "profilePicUrl")
-    ?? (images[0] && typeof images[0] === "object" && "url" in (images[0] as object) ? (images[0] as { url: string }).url : undefined);
-  
+    ?? getString(core, "profilePicUrl");
+
   const welcomeVideoUrl = getString(standardVideo, "url")
     ?? getString(video, "welcomeVideoUrl")
-    ?? getString(core, "welcomeVideoUrl")
-    ?? (videos[0] && typeof videos[0] === "object" && "url" in (videos[0] as object) ? (videos[0] as { url: string }).url : undefined);
+    ?? getString(core, "welcomeVideoUrl");
 
   return { profilePicUrl, welcomeVideoUrl };
 }
@@ -1709,8 +1704,8 @@ export function LeaderDetailApp({ id }: { id: string }) {
                   </div>
 
                   {sections.map((s) => (
-                    <TabsContent key={s.key} value={s.key} className="mt-0">
-                      <div className="rounded-2xl bg-muted/20 p-6">
+                    <TabsContent key={s.key} value={s.key} className="mt-0 text-left">
+                      <div className="rounded-2xl bg-muted/20 p-6 text-left">
                         <RenderValue value={s.value} />
                       </div>
                     </TabsContent>

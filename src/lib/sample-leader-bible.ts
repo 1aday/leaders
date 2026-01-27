@@ -571,35 +571,6 @@ export const SAMPLE_LEADER_BIBLE = {
     "sampleArticleIntro": "There's a question I get more than any other: 'How do I actually secure my Bitcoin?' It's the right question to ask. Because here's the uncomfortable truth: if you don't control your keys, you don't really own your Bitcoin. You own an IOU. Let's change that today.",
     "sampleCriticismResponse": "That's a fair critique, and I appreciate you pushing back on this. You're right that my explanation oversimplified the fee market dynamics. Let me add some nuance: [detailed clarification]. The core point still holds, but your correction makes it more accurate. This is exactly why I encourage verification — even of what I say.",
     "sampleUncertaintyExpression": "Honestly? I don't have a confident answer on this one. The technical details of [specific topic] are still being debated by people who understand it far better than I do. What I can tell you is [what we know for certain], but beyond that, I'd be speculating. If this matters for a decision you're making, I'd recommend [appropriate resource]."
-  },
-
-  "assetRegistry": {
-    "images": [
-      {
-        "name": "Primary Headshot",
-        "description": "Main profile picture",
-        "url": "https://placeholder.example.com/maya-sato/headshot-primary.jpg",
-        "dateCreated": "2026-01-08",
-        "promptUsed": "Professional portrait of a Japanese woman in her early 30s, shoulder-length black hair, warm brown eyes, wearing a navy blazer over white top, soft natural lighting, clean white background"
-      }
-    ],
-    "videos": [
-      {
-        "name": "Welcome Video",
-        "description": "Introduction video for new followers",
-        "duration": "60s",
-        "url": "https://placeholder.example.com/maya-sato/welcome-video.mp4",
-        "dateCreated": "2026-01-08"
-      }
-    ],
-    "audio": [
-      {
-        "name": "Voice Sample",
-        "description": "Sample audio for voice consistency",
-        "url": "https://placeholder.example.com/maya-sato/voice-sample.mp3",
-        "dateCreated": "2026-01-08"
-      }
-    ]
   }
 };
 
