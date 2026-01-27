@@ -8,7 +8,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { SAMPLE_LEADER_BIBLE_JSON } from "@/lib/sample-leader-bible";
 import { safeJsonParse } from "@/lib/safe-json";
 
 type Props = {
@@ -27,10 +26,6 @@ export function JsonInputPanel({ raw, onRawChange, error, onParsed }: Props) {
     if (!result.ok) return;
     onRawChange(JSON.stringify(result.value, null, 2));
   }, [onRawChange, raw]);
-
-  const loadSample = React.useCallback(() => {
-    onRawChange(SAMPLE_LEADER_BIBLE_JSON);
-  }, [onRawChange]);
 
   const clear = React.useCallback(() => {
     onRawChange("");
@@ -80,21 +75,6 @@ export function JsonInputPanel({ raw, onRawChange, error, onParsed }: Props) {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={loadSample}
-                >
-                  <FileText className="mr-2 h-4 w-4" />
-                  Sample
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Load an example leader bible JSON</TooltipContent>
-            </Tooltip>
-
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button

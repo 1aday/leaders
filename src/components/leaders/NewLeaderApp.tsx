@@ -22,7 +22,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn, calculateCompositeScore } from "@/lib/utils";
 import { safeJsonParse } from "@/lib/safe-json";
 import { deriveLeaderSummary, upsertLeader, loadLeaders, saveLeaders } from "@/lib/leader-store";
-import { SAMPLE_LEADER_BIBLES } from "@/lib/sample-leader-bibles";
 
 // Simple JSON syntax highlighter with pretty-printing
 function JsonSyntaxHighlight({ json }: { json: string }) {
@@ -221,13 +220,6 @@ export function NewLeaderApp() {
     if (file) handleFile(file);
   }, [handleFile]);
 
-  const loadSample = React.useCallback(() => {
-    setRaw(JSON.stringify(SAMPLE_LEADER_BIBLES[0], null, 2));
-    setShowTextarea(false);
-    setShowGenerator(false);
-    setPreviewTab("overview");
-    setEditingJson(false);
-  }, []);
 
   const handleGenerate = React.useCallback(async (forceRandom = false) => {
     setGenError(null);
@@ -627,14 +619,6 @@ export function NewLeaderApp() {
                           </>
                         )}
                       </Button>
-                      <Button
-                        variant="ghost"
-                        className="gap-2 rounded-full"
-                        onClick={loadSample}
-                        disabled={generating}
-                      >
-                        Load sample instead
-                      </Button>
                     </div>
                     {generatingMode === "custom" && genProgress > 0 && (
                       <div className="space-y-2">
@@ -710,14 +694,6 @@ export function NewLeaderApp() {
                     >
                       <Sparkles className="h-4 w-4" />
                       Generate with AI
-                    </Button>
-                    <Button
-                      variant="default"
-                      className="gap-2 rounded-full"
-                      onClick={loadSample}
-                    >
-                      <Sparkles className="h-4 w-4" />
-                      Load sample
                     </Button>
                   </div>
                 </div>
