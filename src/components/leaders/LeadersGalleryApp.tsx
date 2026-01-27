@@ -555,7 +555,7 @@ export function LeadersGalleryApp() {
   const handleClearAll = React.useCallback(async () => {
     const confirmed = await confirm({
       title: "Delete All Leaders?",
-      description: `This will permanently remove all ${leaders.length} leaders from your gallery. This action cannot be undone.`,
+      description: `This will permanently remove all ${leaders.length} leaders from your gallery and the cloud database. This action cannot be undone.`,
       confirmText: "Delete All",
       cancelText: "Cancel",
       variant: "danger",
@@ -572,21 +572,35 @@ export function LeadersGalleryApp() {
       }
     });
 
-    // Best-effort: delete from Supabase (if configured)
+    // Delete from Supabase (properly handle errors)
+    let failedCount = 0;
     try {
-      await Promise.allSettled(
+      const results = await Promise.allSettled(
         leaders.map((l) => {
           const leaderKey = extractLeaderKeyFromRawJson(l.rawJson) ?? l.id;
-          return fetch(`/api/leader/${encodeURIComponent(leaderKey)}`, { method: "DELETE" });
+          return fetch(`/api/leader/${encodeURIComponent(leaderKey)}`, { method: "DELETE" })
+            .then(res => res.ok ? Promise.resolve() : Promise.reject(`Failed to delete ${leaderKey}`));
         })
       );
-    } catch {
-      // ignore
+      failedCount = results.filter(r => r.status === "rejected").length;
+    } catch (e) {
+      console.error("Error deleting leaders from cloud:", e);
     }
 
     // Clear localStorage
     saveLeaders([]);
     setLeaders([]);
+
+    // Show warning if some deletions failed
+    if (failedCount > 0) {
+      await confirm({
+        title: "Partial Deletion",
+        description: `${failedCount} leader(s) could not be deleted from the cloud database. They have been removed locally and won't sync back on this device, but may still be accessible via direct URL or from other devices.`,
+        confirmText: "OK",
+        cancelText: "",
+        variant: "default",
+      });
+    }
   }, [leaders, confirm]);
 
   const enhanced = React.useMemo((): LeaderDerived[] => {
