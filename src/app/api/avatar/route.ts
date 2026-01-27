@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { generateAvatarPromptWithOpenAI, generateAvatarWithReplicate } from "@/lib/ai/leader-avatar";
+import { insertLeaderAsset, upsertLeaderFromJson } from "@/lib/db/leader-persist";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,11 +38,38 @@ export async function POST(req: Request) {
       outputFormat: body.outputFormat ?? "png",
     });
 
+    // Best-effort persistence (awaited so it works reliably in serverless).
+    try {
+      const { leaderId } = await upsertLeaderFromJson({ leaderJson, profilePicUrl: img.imageUrl });
+      if (leaderId) {
+        await insertLeaderAsset({
+          leaderId,
+          assetType: "avatar",
+          url: img.imageUrl,
+          provider: "replicate",
+          providerPredictionId: img.predictionId,
+          prompt: promptResult.prompt,
+          negativePrompt: promptResult.negativePrompt ?? null,
+          styleId: promptResult.styleId,
+          meta: {
+            isFamousPerson: promptResult.isFamousPerson,
+            usedFallbackModel: img.usedFallback ?? false,
+            aspectRatio: body.aspectRatio ?? "1:1",
+            outputFormat: body.outputFormat ?? "png",
+          },
+        });
+      }
+    } catch (e) {
+      console.warn("[Supabase] Failed to persist avatar:", e);
+    }
+
     return NextResponse.json({
       profilePicUrl: img.imageUrl,
       replicatePredictionId: img.predictionId,
       styleId: promptResult.styleId,
       prompt: promptResult.prompt,
+      isFamousPerson: promptResult.isFamousPerson,
+      usedFallbackModel: img.usedFallback ?? false,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";

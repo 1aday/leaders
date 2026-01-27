@@ -44,6 +44,87 @@ function hashStringToSeed(s: string): number {
   return (h >>> 0) % 2_147_483_647;
 }
 
+function oneParagraph(s: string): string {
+  return s.replace(/\s*\n+\s*/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function stripDurationMentions(s: string): string {
+  // Do not let the prompt mention time/duration. Duration should be controlled via model params.
+  return (
+    s
+      // "10-second", "5 sec", "10 seconds", etc.
+      .replace(/\b\d+\s*-\s*second\b/gi, "")
+      .replace(/\b\d+\s*(seconds?|secs?)\b/gi, "")
+      // "ten seconds" etc (limited set)
+      .replace(/\b(ten|five|six|seven|eight|nine)\s+seconds?\b/gi, "")
+      .replace(/\s+/g, " ")
+      .trim()
+  );
+}
+
+function normalizeThisPersonLanguage(s: string): string {
+  let out = s;
+  out = out.replace(/\bthe leader\b/gi, "this person");
+  out = out.replace(/\bthe character\b/gi, "this person");
+  out = out.replace(/\bthe subject\b/gi, "this person");
+  return out;
+}
+
+function stripBeatLabels(s: string): string {
+  return s
+    .replace(/\b(opening|first|second|third)\s+beat\s*:\s*/gi, "")
+    .replace(/\bbeat\s*\d+\s*:\s*/gi, "")
+    .trim();
+}
+
+function stripTechCineFluff(s: string): string {
+  return (
+    s
+      .replace(/\b(photorealistic|high-end|cinematic|filmic)\b/gi, "")
+      .replace(/\b(24\s*fps|60\s*fps|8k|4k)\b/gi, "")
+      .replace(/\b(widescreen|aspect\s*ratio\s*16:9|16:9)\b/gi, "")
+      .replace(/\b(key light|rim light|catchlights?|clean blacks?)\b/gi, "")
+      .replace(/\b(color grade|grade)\b/gi, "")
+      .replace(/\s+/g, " ")
+      .trim()
+  );
+}
+
+function compressReferenceImageClause(s: string): string {
+  // Replace long identity anchoring clauses with a short, consistent directive.
+  let out = s;
+  out = out.replace(
+    /anchored\s*(tightly\s*)?to\s*the\s*reference\s*image[^;.,]*/gi,
+    "Match the reference image (same face, hair, and wardrobe)."
+  );
+  out = out.replace(
+    /use\s*the\s*provided\s*reference\s*image[^;.,]*/gi,
+    "Match the reference image (same face, hair, and wardrobe)."
+  );
+  return out;
+}
+
+function truncateToWords(s: string, maxWords: number): string {
+  const words = s.split(/\s+/).filter(Boolean);
+  if (words.length <= maxWords) return s.trim();
+  return words.slice(0, maxWords).join(" ").replace(/[;,:-]+$/g, "").trim() + ".";
+}
+
+function simplifyKlingPrompt(s: string): string {
+  // Goal: speech-first, minimal visual support.
+  let out = oneParagraph(s);
+  out = normalizeThisPersonLanguage(out);
+  out = stripDurationMentions(out);
+  out = stripBeatLabels(out);
+  out = compressReferenceImageClause(out);
+  out = stripTechCineFluff(out);
+  // Normalize separators and remove excess punctuation/listing feel.
+  out = out.replace(/\s*;\s*/g, ". ");
+  out = out.replace(/\s*:\s*/g, ". ");
+  out = out.replace(/\s+/g, " ").trim();
+  return truncateToWords(out, 85);
+}
+
 export type KlingTrailerPromptResult = {
   prompt: string;
   negativePrompt?: string;
@@ -83,7 +164,7 @@ export async function generateKlingTrailerPromptWithOpenAI(opts: {
     throw new Error("Missing OPENAI_API_KEY");
   }
 
-  const model = process.env.OPENAI_MODEL || "gpt-5.2";
+  const model = process.env.OPENAI_MODEL || "gpt-5-nano-2025-08-07";
 
   const root = isPlainObject(opts.leaderJson) ? opts.leaderJson : null;
   const core = root && isPlainObject(root.coreIdentity) ? (root.coreIdentity as AnyRecord) : null;
@@ -92,6 +173,8 @@ export async function generateKlingTrailerPromptWithOpenAI(opts: {
   const visualStyle = visual && isPlainObject(visual.visualStyle) ? (visual.visualStyle as AnyRecord) : null;
   const comm = root && isPlainObject(root.communicationStyle) ? (root.communicationStyle as AnyRecord) : null;
   const voice = comm && isPlainObject(comm.voice) ? (comm.voice as AnyRecord) : null;
+  const voiceIdentity = root && isPlainObject(root.voiceIdentity) ? (root.voiceIdentity as AnyRecord) : null;
+  const voiceChars = voiceIdentity && isPlainObject(voiceIdentity.voiceCharacteristics) ? (voiceIdentity.voiceCharacteristics as AnyRecord) : null;
 
   const compact = {
     id: opts.leaderId ?? pickString(meta, "leaderId"),
@@ -105,6 +188,7 @@ export async function generateKlingTrailerPromptWithOpenAI(opts: {
     doSay: Array.isArray(voice?.doSay) ? (voice?.doSay as unknown[]).filter((v) => typeof v === "string").slice(0, 5) : undefined,
     dontSay: Array.isArray(voice?.dontSay) ? (voice?.dontSay as unknown[]).filter((v) => typeof v === "string").slice(0, 5) : undefined,
     catchphrases: Array.isArray(voice?.catchphrases) ? (voice?.catchphrases as unknown[]).filter((v) => typeof v === "string").slice(0, 5) : undefined,
+    spokenAccent: pickString(voiceChars, "spokenAccent"),
   };
 
   const leaderContext = safeJsonStringify(compact, 6000);
@@ -112,14 +196,21 @@ export async function generateKlingTrailerPromptWithOpenAI(opts: {
   const system = [
     "You are a world-class prompt engineer for cinematic AI video generation.",
     "You MUST follow the style guide exactly to keep outputs consistent across many different leaders.",
-    "Write the prompt as NATURAL LANGUAGE like a film director describing what we see and what happens.",
+    "Write the prompt as NATURAL LANGUAGE, but prioritize the spoken line and performance above everything else.",
+    "The prompt should read like: what this person says, how they say it, and the minimal visuals that support it.",
+    "Your prompt must be a SINGLE PARAGRAPH with SHORT SENTENCES (2–4 sentences).",
     "Refer to the subject ONLY as: 'this person' (never use a name).",
-    "Include exactly ONE short spoken line for this person (in quotes) that matches their voice and mission.",
-    "IMPORTANT: Do NOT mention duration or seconds anywhere in the prompt.",
+    "Include exactly ONE short spoken line for this person, written in quotes, and do not include any other quoted text.",
+    "The spoken line MUST be first-person and MUST communicate: who this person is + what this person helps with (e.g., 'I help you ____').",
+    "Keep the spoken line to 8–16 words. No hype. No clichés. No promises of riches.",
+    "IMPORTANT: Do NOT mention duration, seconds, 5s/10s, or timing anywhere in the prompt.",
     "IMPORTANT: Do NOT include any on-screen text. No captions. No subtitles. No logos. No watermarks.",
+    "Keep visuals minimal and supportive: at most 1–2 abstract expertise-related visual aids (no readable text, no logos).",
+    "Avoid unnecessary cinematography jargon and micro-details (no 'catchlights', 'filmic grade', 'clean blacks', etc).",
+    "Avoid beat labeling (no 'opening beat', 'second beat', etc).",
     "Return ONLY valid JSON, no markdown, no commentary.",
     'JSON schema: {"prompt": string, "negativePrompt": string}.',
-    "The prompt should be one paragraph, under 160 words.",
+    "The prompt should be under 90 words.",
   ].join("\n");
 
   const user = [
@@ -130,11 +221,14 @@ export async function generateKlingTrailerPromptWithOpenAI(opts: {
     leaderContext,
     "",
     "Task:",
-    "- Produce a single paragraph prompt describing a 3-beat cinematic intro video.",
-    "- Make it vivid and concrete: camera motion, lighting, environment, micro-actions, facial expression.",
-    "- Incorporate 1-2 subtle domain motifs based on the leader's vertical/subdomains (e.g. for bitcoin: warm gold coin motif / abstract ledger glow; for finance: minimal chart lines / ticker-like light patterns) but with NO readable text or logos.",
-    "- Anchor identity to the provided reference image: same face/hair/age/wardrobe vibe.",
-    "- Include exactly one spoken line in quotes that this person says to camera; it should sound like them (use doSay/catchphrases/mission if helpful).",
+    "- Produce a single paragraph prompt for a talking-head intro video where the main point is what this person says.",
+    "- Dialogue: include exactly ONE spoken line in quotes. It MUST say who this person is + what this person helps with, in first-person, and include the phrase 'I help you' or 'I help people'. Use voice/doSay/catchphrases/mission to match their tone.",
+    "- Performance: specify tone, pacing, and expression so lip-sync feels natural (e.g., calm, confident, warm; direct-to-camera). If spokenAccent is provided, incorporate it naturally (e.g., 'speaking English with a subtle Japanese accent').",
+    "- Visuals: keep the scene minimal and non-distracting. ONLY if it clearly supports the expertise, include at most 1–2 abstract visual aids behind/around this person (examples: bitcoin → warm gold coin motif / abstract ledger glow; finance → faint chart-line light patterns; healthcare → abstract pulse waveform light). No readable text/logos.",
+    "- Camera/lighting: keep it simple (stable framing; gentle push-in or slight orbit). No technical jargon.",
+    "- Identity: anchor strictly to the reference image (same face/hair/age/wardrobe vibe). Single subject only.",
+    "- End with an explicit 'Avoid:' clause in the same paragraph covering: on-screen text/subtitles/logos/watermarks, extra people, glitches/warping, distorted faces.",
+    "- Do NOT include the leader's name, and do NOT include any JSON in the prompt itself.",
   ].join("\n");
 
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -190,7 +284,7 @@ export async function generateKlingTrailerPromptWithOpenAI(opts: {
   if (!prompt) throw new Error("OpenAI JSON missing prompt");
 
   return {
-    prompt,
+    prompt: simplifyKlingPrompt(prompt),
     negativePrompt:
       negativePrompt ??
       "text, subtitles, captions, watermark, logo, brand, illustration, cartoon, anime, 3d render, CGI, low quality, blurry, distorted face, deformed anatomy, extra people, multiple faces, clones, noisy background, political symbols, weapons, gore",
@@ -206,6 +300,9 @@ export function buildKlingTrailerPrompt(opts: { leaderJson: unknown; leaderId?: 
   const visualStyle = visual && isPlainObject(visual.visualStyle) ? (visual.visualStyle as AnyRecord) : null;
   const comm = root && isPlainObject(root.communicationStyle) ? (root.communicationStyle as AnyRecord) : null;
   const voice = comm && isPlainObject(comm.voice) ? (comm.voice as AnyRecord) : null;
+  const voiceIdentity = root && isPlainObject(root.voiceIdentity) ? (root.voiceIdentity as AnyRecord) : null;
+  const voiceChars = voiceIdentity && isPlainObject(voiceIdentity.voiceCharacteristics) ? (voiceIdentity.voiceCharacteristics as AnyRecord) : null;
+  const spokenAccent = pickString(voiceChars, "spokenAccent");
 
   const compactLeaderInfo = {
     id: opts.leaderId ?? pickString(meta, "leaderId"),
@@ -220,6 +317,7 @@ export function buildKlingTrailerPrompt(opts: { leaderJson: unknown; leaderId?: 
     catchphrases: Array.isArray(voice?.catchphrases)
       ? (voice?.catchphrases as unknown[]).filter((v) => typeof v === "string").slice(0, 3)
       : undefined,
+    spokenAccent,
   };
 
   const leaderContext = safeJsonStringify(compactLeaderInfo, 2000);
@@ -235,20 +333,39 @@ export function buildKlingTrailerPrompt(opts: { leaderJson: unknown; leaderId?: 
 
   const spokenLine = (() => {
     // Prefer first-person mission lines (common in your sample bibles).
-    if (mission && /^(i|we)\b/i.test(mission.trim())) return mission.trim();
-    if (catchphrases[0]) return catchphrases[0].trim();
-    if (doSay[0]) return doSay[0].trim();
-    if (mission) return mission.trim();
-    if (tagline) return tagline.trim();
-    return "I’m here to help you take the next step—clearly, calmly, and with momentum.";
+    const m = mission?.trim();
+    const t = tagline?.trim();
+    const c0 = catchphrases[0]?.trim();
+    const d0 = doSay[0]?.trim();
+
+    // If mission already contains an explicit help statement, use it.
+    if (m && /\bi help\b/i.test(m)) return m;
+
+    // Try to coerce mission/tagline into a short "who + help" line.
+    // We keep it simple and safe; the OpenAI path is preferred for nuance.
+    if (m && /^(i|we)\b/i.test(m)) {
+      // If it's too long, shorten to a generic but aligned help statement.
+      if (m.split(/\s+/).length <= 16) return m;
+      return "I help you make smart, calm decisions in your domain.";
+    }
+
+    if (d0 && /\bi help\b/i.test(d0)) return d0;
+    if (c0 && /\bi help\b/i.test(c0)) return c0;
+
+    // Fall back to a conservative, useful line.
+    if (t && t.split(/\s+/).length <= 12) return `I help you with ${t.toLowerCase()}.`;
+    return "I help you get clarity and take the next best step.";
   })();
+
+  // Build accent clause for the spoken line if provided
+  const accentClause = spokenAccent ? `, speaking English with a ${spokenAccent}` : "";
 
   // Deterministic, consistent prompt shell. We avoid calling an LLM here so style stays predictable.
   const prompt = [
-    "Cinematic character intro video. Photorealistic, high-end film look, 24fps, widescreen 16:9.",
+    "Cinematic character intro video. Photorealistic, high-end film look, 24fps, square 1:1 aspect ratio.",
     "Use the provided reference image to keep this person's identity strictly consistent (same face, hair, age, wardrobe vibe). Single subject only.",
     "Three beats:",
-    "(1) Opening: intimate close-up; subtle dolly-in; confident, approachable expression; clean catchlights; minimal abstract background. This person looks into camera and says:",
+    `(1) Opening: intimate close-up; subtle dolly-in; confident, approachable expression; clean catchlights; minimal abstract background. This person looks into camera${accentClause} and says:`,
     `"${spokenLine}"`,
     "(2) Competence moment: medium shot; smooth orbit; subtle domain-relevant action gesture (no props with logos); modern minimal environment.",
     "(3) Hero: waist-up hero pose; gentle push-in; calm power; tasteful rim light; cinematic grade. This person ends with a grounded, confident expression after speaking.",
@@ -365,7 +482,7 @@ export async function createKlingTrailerPrediction(opts: {
   if (negativePromptKey && opts.negativePrompt) input[negativePromptKey] = opts.negativePrompt;
   if (imageKey && opts.imageUrl) input[imageKey] = opts.imageUrl;
   if (durationKey) input[durationKey] = opts.durationSeconds ?? 10;
-  if (aspectKey) input[aspectKey] = opts.aspectRatio ?? "16:9";
+  if (aspectKey) input[aspectKey] = opts.aspectRatio ?? "1:1";
   if (seedKey) input[seedKey] = hashStringToSeed(opts.leaderId ?? "profilemaker");
 
   const createRes = await fetch("https://api.replicate.com/v1/predictions", {

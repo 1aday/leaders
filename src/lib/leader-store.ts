@@ -3,6 +3,7 @@ export type LeaderSummary = {
   id: string;
   name: string;
   tagline?: string;
+  expertise?: string;
   vertical?: string;
   subDomains?: string[];
   tier?: string;
@@ -15,8 +16,10 @@ export type LeaderSummary = {
 };
 
 import { SAMPLE_LEADER_BIBLES } from "./sample-leader-bibles";
+import { calculateCompositeScore } from "./utils";
 
 const STORAGE_KEY = "profilemaker.leaders.v1";
+const DELETED_IDS_KEY = "profilemaker.deletedLeaderIds.v1";
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === "object" && !Array.isArray(v);
@@ -25,7 +28,7 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
 function getString(obj: Record<string, unknown> | null, key: string): string | undefined {
   if (!obj) return undefined;
   const v = obj[key];
-  return typeof v === "string" ? v : undefined;
+  return typeof v === "string" && v.trim() ? v : undefined;
 }
 
 function getNumber(obj: Record<string, unknown> | null, key: string): number | undefined {
@@ -49,15 +52,9 @@ export function deriveLeaderSummary(parsed: unknown, rawJson: string): Omit<Lead
   const imagePrompts = visual && isPlainObject(visual.imagePrompts) ? (visual.imagePrompts as Record<string, unknown>) : null;
   const primaryImage = imagePrompts && isPlainObject(imagePrompts.primary) ? (imagePrompts.primary as Record<string, unknown>) : null;
   
-  // Extract video identity for welcome video
-  const video = root && isPlainObject(root.videoIdentity) ? (root.videoIdentity as Record<string, unknown>) : null;
-  const videoPrompts = video && isPlainObject(video.videoPrompts) ? (video.videoPrompts as Record<string, unknown>) : null;
-  const standardVideo = videoPrompts && isPlainObject(videoPrompts.standard) ? (videoPrompts.standard as Record<string, unknown>) : null;
-  
   // Also check for direct URLs in asset registry
   const assets = root && isPlainObject(root.assetRegistry) ? (root.assetRegistry as Record<string, unknown>) : null;
   const images = assets && Array.isArray(assets.images) ? assets.images : [];
-  const videos = assets && Array.isArray(assets.videos) ? assets.videos : [];
   
   const id = getString(metadata, "leaderId") ?? (typeof crypto !== "undefined" ? crypto.randomUUID() : String(Date.now()));
   const name = getString(core, "name") ?? "Untitled leader";
@@ -67,21 +64,31 @@ export function deriveLeaderSummary(parsed: unknown, rawJson: string): Omit<Lead
     ? (subDomainsRaw.filter((v) => typeof v === "string") as string[])
     : undefined;
   const tier = getString(scores, "tier");
-  const compositeScore = getNumber(scores, "compositeScore");
+  // Calculate composite score from individual scores instead of trusting stored value
+  const character = getNumber(scores, "character");
+  const competence = getNumber(scores, "competence");
+  const impact = getNumber(scores, "impact");
+  const compositeScore = calculateCompositeScore(character, competence, impact);
   
   // Try to get profile pic URL from various places in the schema
-  const profilePicUrl = getString(primaryImage, "url") 
+  // Filter out placeholder URLs that aren't real assets
+  const isPlaceholderUrl = (url: string | undefined): boolean => {
+    if (!url) return true;
+    return url.includes("placeholder.example.com") || url.includes("example.com/");
+  };
+  
+  const rawProfilePicUrl = getString(primaryImage, "url") 
     ?? getString(visual, "profilePicUrl")
     ?? getString(core, "profilePicUrl")
     ?? (images[0] && typeof images[0] === "object" && "url" in (images[0] as object) ? (images[0] as { url: string }).url : undefined);
   
-  // Try to get welcome video URL
-  const welcomeVideoUrl = getString(standardVideo, "url")
-    ?? getString(video, "welcomeVideoUrl")
-    ?? getString(core, "welcomeVideoUrl")
-    ?? (videos[0] && typeof videos[0] === "object" && "url" in (videos[0] as object) ? (videos[0] as { url: string }).url : undefined);
+  const profilePicUrl = isPlaceholderUrl(rawProfilePicUrl) ? undefined : rawProfilePicUrl;
+  
+  // NOTE: We intentionally do NOT extract welcomeVideoUrl from the JSON schema here.
+  // Video URLs should only be set when a video is actually generated via the API.
+  // This prevents sample/placeholder video URLs from showing up as playable videos.
 
-  return { id, name, tagline, vertical, subDomains, tier, compositeScore, profilePicUrl, welcomeVideoUrl, rawJson };
+  return { id, name, tagline, vertical, subDomains, tier, compositeScore, profilePicUrl, rawJson };
 }
 
 export function loadLeaders(): LeaderSummary[] {
@@ -105,6 +112,38 @@ export function saveLeaders(next: LeaderSummary[]) {
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
 }
 
+/** Load the set of deleted leader IDs (to prevent re-adding them via sync/seed). */
+export function loadDeletedIds(): Set<string> {
+  if (typeof window === "undefined" || !window.localStorage) return new Set();
+  try {
+    const raw = window.localStorage.getItem(DELETED_IDS_KEY);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw) as unknown;
+    if (!Array.isArray(arr)) return new Set();
+    return new Set(arr.filter((x) => typeof x === "string") as string[]);
+  } catch {
+    return new Set();
+  }
+}
+
+/** Mark a leader ID as deleted (to prevent re-adding via sync/seed). */
+export function markDeleted(id: string) {
+  if (typeof window === "undefined" || !window.localStorage) return;
+  const deleted = loadDeletedIds();
+  deleted.add(id);
+  // Keep only the most recent 500 deleted IDs to avoid unbounded growth
+  const arr = Array.from(deleted).slice(-500);
+  window.localStorage.setItem(DELETED_IDS_KEY, JSON.stringify(arr));
+}
+
+/** Remove an ID from the deleted set (e.g., if re-creating a leader with same ID). */
+export function unmarkDeleted(id: string) {
+  if (typeof window === "undefined" || !window.localStorage) return;
+  const deleted = loadDeletedIds();
+  deleted.delete(id);
+  window.localStorage.setItem(DELETED_IDS_KEY, JSON.stringify(Array.from(deleted)));
+}
+
 /**
  * Seed helper: ensures the gallery has at least `minCount` leaders by adding built-in
  * fictional sample leaders without overwriting existing ones.
@@ -126,24 +165,50 @@ export function seedLeadersIfEmpty(minCount = 20): LeaderSummary[] {
     if (id) seedById.set(id, b);
   }
 
+  // Sample/placeholder URLs that should be cleared (not actual generated assets)
+  const sampleUrlPatterns = [
+    "storage.googleapis.com/gtv-videos-bucket/sample",
+    "example.com",
+    "placeholder",
+  ];
+  
+  const isSampleUrl = (url: string | undefined): boolean => {
+    if (!url) return false;
+    return sampleUrlPatterns.some((pattern) => url.includes(pattern));
+  };
+
   let mutated = false;
   const hydratedExisting = existing.map((l) => {
+    let updated = l;
+    
+    // Migration: Clear sample video URLs - only keep actually generated videos
+    if (isSampleUrl(l.welcomeVideoUrl)) {
+      updated = { ...updated, welcomeVideoUrl: undefined };
+      mutated = true;
+    }
+    
+    // Migration: Clear sample/placeholder profile pic URLs - only keep actually generated avatars
+    if (isSampleUrl(l.profilePicUrl)) {
+      updated = { ...updated, profilePicUrl: undefined };
+      mutated = true;
+    }
+    
     // Hydrate missing summary fields from rawJson if possible.
-    if (!l.subDomains || !l.vertical || !l.tier || typeof l.compositeScore !== "number") {
+    if (!updated.subDomains || !updated.vertical || !updated.tier || typeof updated.compositeScore !== "number") {
       try {
-        const parsed = JSON.parse(l.rawJson) as unknown;
-        const derived = deriveLeaderSummary(parsed, l.rawJson);
+        const parsed = JSON.parse(updated.rawJson) as unknown;
+        const derived = deriveLeaderSummary(parsed, updated.rawJson);
         // Only fill missing fields; keep user's current values if present.
         const next: LeaderSummary = {
-          ...l,
-          vertical: l.vertical ?? derived.vertical,
-          subDomains: l.subDomains ?? derived.subDomains,
-          tier: l.tier ?? derived.tier,
-          compositeScore: typeof l.compositeScore === "number" ? l.compositeScore : derived.compositeScore,
-          profilePicUrl: l.profilePicUrl ?? derived.profilePicUrl,
-          welcomeVideoUrl: l.welcomeVideoUrl ?? derived.welcomeVideoUrl,
+          ...updated,
+          vertical: updated.vertical ?? derived.vertical,
+          subDomains: updated.subDomains ?? derived.subDomains,
+          tier: updated.tier ?? derived.tier,
+          compositeScore: typeof updated.compositeScore === "number" ? updated.compositeScore : derived.compositeScore,
+          profilePicUrl: updated.profilePicUrl ?? derived.profilePicUrl,
+          // NOTE: Don't copy welcomeVideoUrl from derived - only keep explicitly generated ones
         };
-        if (next !== l) mutated = true;
+        if (JSON.stringify(next) !== JSON.stringify(updated)) mutated = true;
         return next;
       } catch {
         // ignore
@@ -151,29 +216,40 @@ export function seedLeadersIfEmpty(minCount = 20): LeaderSummary[] {
     }
 
     // Upgrade old seeded JSON to the current full template if it looks "legacy".
-    const seed = seedById.get(l.id);
+    const seed = seedById.get(updated.id);
     if (
       seed &&
-      typeof l.rawJson === "string" &&
-      (!l.rawJson.includes('"communicationStyle"') ||
-        l.rawJson.includes("photo-1524503033411-f7a2fe8c7f1d"))
+      typeof updated.rawJson === "string" &&
+      (!updated.rawJson.includes('"communicationStyle"') ||
+        updated.rawJson.includes("photo-1524503033411-f7a2fe8c7f1d"))
     ) {
       const rawJson = JSON.stringify(seed, null, 2);
       const base = deriveLeaderSummary(seed, rawJson);
       mutated = true;
-      return { ...l, ...base, rawJson, updatedAt: now };
+      // Preserve existing welcomeVideoUrl and profilePicUrl if they were generated
+      return { 
+        ...updated, 
+        ...base, 
+        profilePicUrl: updated.profilePicUrl ?? base.profilePicUrl,
+        welcomeVideoUrl: updated.welcomeVideoUrl, // Preserve any generated video URL
+        rawJson, 
+        updatedAt: now 
+      };
     }
 
-    return l;
+    return updated;
   });
 
   const seen = new Set(hydratedExisting.map((l) => l.id));
+  const deletedIds = loadDeletedIds();
   const additions: LeaderSummary[] = [];
 
   for (const b of SAMPLE_LEADER_BIBLES.slice(0, desired)) {
     const rawJson = JSON.stringify(b, null, 2);
     const base = deriveLeaderSummary(b, rawJson);
     if (seen.has(base.id)) continue;
+    // Don't re-add leaders that were explicitly deleted
+    if (deletedIds.has(base.id)) continue;
     seen.add(base.id);
     additions.push({ ...base, createdAt: now, updatedAt: now });
     if (hydratedExisting.length + additions.length >= desired) break;
@@ -211,8 +287,16 @@ export function upsertLeader(summary: Omit<LeaderSummary, "createdAt" | "updated
 }
 
 export function getLeaderById(id: string): LeaderSummary | null {
-  // If the user lands directly on a leader detail route before visiting the gallery,
-  // localStorage may be empty. Seed once to ensure sample leaders resolve.
-  const current = seedLeadersIfEmpty();
-  return current.find((l) => l.id === id) ?? null;
+  // First try to load directly from storage
+  const current = loadLeaders();
+  const found = current.find((l) => l.id === id);
+  if (found) return found;
+  
+  // If not found and storage is empty, seed sample leaders
+  if (current.length === 0) {
+    const seeded = seedLeadersIfEmpty();
+    return seeded.find((l) => l.id === id) ?? null;
+  }
+  
+  return null;
 }

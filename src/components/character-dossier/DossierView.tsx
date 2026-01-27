@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { cn } from "@/lib/utils";
+import { cn, calculateCompositeScore } from "@/lib/utils";
 
 type Props = {
   value: unknown;
@@ -220,10 +220,11 @@ function Hero({ value }: { value: Record<string, unknown> }) {
   const vertical = metadata?.vertical && typeof metadata.vertical === "string" ? metadata.vertical : null;
   const tier = scores?.tier && typeof scores.tier === "string" ? scores.tier : null;
 
-  const composite =
-    scores?.compositeScore && typeof scores.compositeScore === "number"
-      ? scores.compositeScore
-      : null;
+  // Calculate composite score from individual scores instead of trusting stored value
+  const character = typeof scores?.character === "number" ? scores.character : undefined;
+  const competence = typeof scores?.competence === "number" ? scores.competence : undefined;
+  const impact = typeof scores?.impact === "number" ? scores.impact : undefined;
+  const composite = calculateCompositeScore(character, competence, impact) ?? null;
 
   return (
     <Card className="relative overflow-hidden">

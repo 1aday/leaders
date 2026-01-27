@@ -46,8 +46,31 @@ Open any leader and click **Generate intro video**. The returned URL is saved in
 2) Fill in:
 
 - `OPENAI_API_KEY`
-- `OPENAI_MODEL` (defaults to `gpt-5.2`)
+- `OPENAI_MODEL` (defaults to `gpt-5-nano-2025-08-07`)
 - `REPLICATE_API_TOKEN`
+
+## Supabase (DB persistence)
+
+This app can also persist generated Leaders / Avatars / Trailers / Chat logs into Supabase.
+
+### Supabase setup
+
+- Create a new Supabase project
+- In **SQL Editor**, run `supabase/schema.sql`
+
+### Supabase environment variables
+
+Add to `.env.local`:
+
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY` (optional today; useful later if you want browser-side reads)
+- `SUPABASE_SERVICE_ROLE_KEY` (**server-only**; never expose to the browser)
+
+### Install dependency
+
+```bash
+npm i @supabase/supabase-js
+```
 
 ### Usage
 

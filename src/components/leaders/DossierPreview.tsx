@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { Copy, FileJson2, Hash, Quote, User } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, calculateCompositeScore } from "@/lib/utils";
 
 type Props = {
   value: unknown;
@@ -146,7 +146,12 @@ export function DossierPreview({ value }: Props) {
   const leaderId = metadata?.leaderId as string | undefined;
   const vertical = metadata?.vertical as string | undefined;
   const tier = scores?.tier as string | undefined;
-  const composite = scores?.compositeScore as number | undefined;
+  
+  // Calculate composite score from individual scores instead of trusting stored value
+  const character = typeof scores?.character === "number" ? scores.character : undefined;
+  const competence = typeof scores?.competence === "number" ? scores.competence : undefined;
+  const impact = typeof scores?.impact === "number" ? scores.impact : undefined;
+  const composite = calculateCompositeScore(character, competence, impact);
 
   const primaryColors = Array.isArray(colorPalette?.primary)
     ? (colorPalette.primary as Array<{ name: string; hex: string }>)

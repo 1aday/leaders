@@ -4,8 +4,7 @@ export type SafeJsonParseResult =
 
 export function safeJsonParse(input: string): SafeJsonParseResult {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const value = JSON.parse(input);
+    const value: unknown = JSON.parse(input);
     return { ok: true, value };
   } catch (err) {
     return {
