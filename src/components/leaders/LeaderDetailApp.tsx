@@ -324,12 +324,12 @@ function LongTextBlock({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl bg-muted/10 p-6 border border-border/30">
       <div className="mb-3 flex items-center justify-between">
-        <span className="text-sm font-semibold text-foreground/70">
+        <span className="text-xs font-semibold text-foreground/70 uppercase tracking-wide">
           {label}
         </span>
         <CopyButton text={value} />
       </div>
-      <p className="whitespace-pre-wrap text-base leading-relaxed text-foreground">
+      <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
         {value}
       </p>
     </div>
@@ -345,8 +345,8 @@ function ColorSwatch({ name, hex }: { name: string; hex: string }) {
         style={{ backgroundColor: hex }}
       />
       <div className="min-w-0 flex-1">
-        <div className="text-base font-medium text-foreground">{name}</div>
-        <div className="font-mono text-sm text-muted-foreground">{hex}</div>
+        <div className="text-sm font-medium text-foreground">{name}</div>
+        <div className="font-mono text-xs text-muted-foreground">{hex}</div>
       </div>
       <CopyButton text={hex} />
     </div>
@@ -365,7 +365,7 @@ function Section({
 }) {
   return (
     <div className={className}>
-      <h3 className="mb-4 text-base font-semibold text-foreground/80">
+      <h3 className="mb-4 text-sm font-semibold text-foreground/80 uppercase tracking-wide">
         {title}
       </h3>
       {children}
@@ -383,11 +383,11 @@ function RenderValue({ value, depth = 0 }: { value: unknown; depth?: number }) {
     if (value.length > 200) {
       return <LongTextBlock label="Content" value={value} />;
     }
-    return <span className="text-base text-foreground">{value}</span>;
+    return <span className="text-sm text-foreground">{value}</span>;
   }
 
   if (typeof value === "number" || typeof value === "boolean") {
-    return <span className="font-mono text-base text-foreground">{String(value)}</span>;
+    return <span className="font-mono text-sm text-foreground">{String(value)}</span>;
   }
 
   if (Array.isArray(value)) {
@@ -439,12 +439,12 @@ function RenderValue({ value, depth = 0 }: { value: unknown; depth?: number }) {
               {scalars.map(([k, v], idx) => (
                 <div
                   key={k}
-                  className="grid grid-cols-[200px_1fr] gap-6 px-6 py-4 hover:bg-accent/5 transition-colors"
+                  className="grid grid-cols-[200px_1fr] gap-6 px-6 py-3.5 hover:bg-accent/5 transition-colors"
                 >
-                  <span className="text-base font-medium text-muted-foreground">
+                  <span className="text-sm font-medium text-muted-foreground">
                     {titleCase(k)}
                   </span>
-                  <span className="text-base text-foreground">
+                  <span className="text-sm text-foreground">
                     {String(v)}
                   </span>
                 </div>
