@@ -361,11 +361,6 @@ export function getLeaderById(id: string): LeaderSummary | null {
   found = current.find((l) => l.id.toLowerCase() === lowerSearchId);
   if (found) return found;
 
-  // If not found and storage is empty, seed sample leaders
-  if (current.length === 0) {
-    const seeded = seedLeadersIfEmpty();
-    return seeded.find((l) => l.id === id || l.id === normalizedId || l.id.toLowerCase() === lowerSearchId) ?? null;
-  }
-
+  // Don't auto-seed sample leaders - just return null if not found
   return null;
 }

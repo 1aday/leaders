@@ -510,7 +510,8 @@ export function LeadersGalleryApp() {
   const { confirm, ConfirmDialog } = useConfirm();
 
   React.useEffect(() => {
-    setLeaders(seedLeadersIfEmpty());
+    // Load existing leaders only, don't auto-seed samples
+    setLeaders(loadLeaders());
     setMounted(true);
 
     // Hydrate localStorage from Supabase (best-effort).
