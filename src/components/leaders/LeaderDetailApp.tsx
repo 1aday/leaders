@@ -1327,7 +1327,7 @@ export function LeaderDetailApp({ id }: { id: string }) {
                 </button>
                 {showAvatarPrompt && (
                   <div className="border-t border-border/40 px-4 py-4 bg-muted/10">
-                    <p className="text-[11px] leading-relaxed text-foreground/80 font-mono whitespace-pre-wrap break-words">
+                    <p className="text-[11px] leading-relaxed text-foreground/80 font-mono whitespace-pre-wrap break-all max-w-full">
                       {avatarPrompt}
                     </p>
                     <button
@@ -1357,7 +1357,7 @@ export function LeaderDetailApp({ id }: { id: string }) {
                 </button>
                 {showVideoPrompt && (
                   <div className="border-t border-border/40 px-4 py-4 bg-muted/10">
-                    <p className="text-[11px] leading-relaxed text-foreground/80 font-mono whitespace-pre-wrap break-words">
+                    <p className="text-[11px] leading-relaxed text-foreground/80 font-mono whitespace-pre-wrap break-all max-w-full">
                       {videoPrompt}
                     </p>
                     <button
