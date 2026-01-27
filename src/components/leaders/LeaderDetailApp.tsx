@@ -434,22 +434,27 @@ function RenderValue({ value, depth = 0 }: { value: unknown; depth?: number }) {
     return (
       <div className="space-y-6">
         {scalars.length > 0 && (
-          <div className="rounded-xl border border-border/40 overflow-hidden">
-            <div className="divide-y divide-border/30">
-              {scalars.map(([k, v], idx) => (
-                <div
-                  key={k}
-                  className="grid grid-cols-[200px_1fr] gap-6 px-6 py-3.5 hover:bg-accent/5 transition-colors"
-                >
-                  <span className="text-sm font-medium text-muted-foreground">
-                    {titleCase(k)}
-                  </span>
-                  <span className="text-sm text-foreground">
-                    {String(v)}
-                  </span>
-                </div>
-              ))}
-            </div>
+          <div className="rounded-xl border border-border/50 overflow-hidden shadow-sm">
+            <table className="w-full">
+              <tbody>
+                {scalars.map(([k, v], idx) => (
+                  <tr
+                    key={k}
+                    className={cn(
+                      "transition-colors hover:bg-accent/8",
+                      idx % 2 === 0 ? "bg-muted/5" : "bg-transparent"
+                    )}
+                  >
+                    <td className="w-[200px] px-6 py-3.5 text-sm font-medium text-muted-foreground align-top border-r border-border/30">
+                      {titleCase(k)}
+                    </td>
+                    <td className="px-6 py-3.5 text-sm text-foreground">
+                      {String(v)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
         {complex.map(([k, v]) => (
