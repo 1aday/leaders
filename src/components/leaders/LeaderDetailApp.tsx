@@ -1548,10 +1548,6 @@ export function LeaderDetailApp({ id }: { id: string }) {
                 <span>ID</span>
                 <code className="text-[10px] font-mono">{leader.id}</code>
               </div>
-              <div className="flex justify-between">
-                <span>Updated</span>
-                <span>{new Date(leader.updatedAt).toLocaleDateString()}</span>
-              </div>
             </div>
           </aside>
 
@@ -1778,9 +1774,9 @@ export function LeaderDetailApp({ id }: { id: string }) {
                     <TabsContent
                       key={s.key}
                       value={s.key}
-                      className="mt-0 text-left animate-in fade-in-0 slide-in-from-bottom-2 duration-300"
+                      className="mt-0 text-left animate-in fade-in-0 slide-in-from-bottom-2 duration-300 scroll-mt-0 focus:outline-none"
                     >
-                      <div className="rounded-2xl bg-muted/10 p-8 text-left border border-border/20">
+                      <div className="rounded-2xl bg-muted/10 p-8 text-left border border-border/20 min-h-[200px]">
                         <RenderValue value={s.value} />
                       </div>
                     </TabsContent>
