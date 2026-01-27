@@ -551,7 +551,9 @@ export function NewLeaderApp() {
                       {generatingMode === "random" && (
                         <div className="mt-3 space-y-2">
                           <div className="flex items-center justify-between text-sm">
-                            <span className="text-muted-foreground">Generating...</span>
+                            <span className="text-muted-foreground">
+                              {genProgress <= 1 ? "Waiting for OpenAI..." : "Generating..."}
+                            </span>
                             <span className="font-medium tabular-nums text-foreground">{genProgress}%</span>
                           </div>
                           <Progress value={genProgress} className="h-2" />
@@ -625,7 +627,9 @@ export function NewLeaderApp() {
                     {generatingMode === "custom" && (
                       <div className="space-y-2">
                         <div className="flex items-center justify-between text-sm">
-                          <span className="text-muted-foreground">Generating Leader Bible...</span>
+                          <span className="text-muted-foreground">
+                            {genProgress <= 1 ? "Waiting for OpenAI..." : "Generating Leader Bible..."}
+                          </span>
                           <span className="font-medium tabular-nums text-foreground">{genProgress}%</span>
                         </div>
                         <Progress value={genProgress} className="h-2" />

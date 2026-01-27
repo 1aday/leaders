@@ -1298,11 +1298,6 @@ Return the complete JSON matching the schema.`;
     reader.releaseLock();
   }
 
-    }
-  } finally {
-    reader.releaseLock();
-  }
-
   // Final progress update: 100%
   if (input.onProgress) {
     input.onProgress({
