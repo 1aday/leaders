@@ -552,6 +552,48 @@ export function LeadersGalleryApp() {
     setLeaders(next);
   }, [leaders, confirm]);
 
+  const handleClearDatabase = React.useCallback(async () => {
+    const confirmed = await confirm({
+      title: "Clear Database?",
+      description: "This will delete ALL leaders from the cloud database (Supabase), including any legacy leaders not visible in your gallery. This action cannot be undone.",
+      confirmText: "Clear Database",
+      cancelText: "Cancel",
+      variant: "danger",
+    });
+
+    if (!confirmed) return;
+
+    try {
+      const res = await fetch("/api/leaders/clear", { method: "DELETE" });
+      const data = await res.json() as { ok?: boolean; deleted?: number; error?: string };
+
+      if (!res.ok) {
+        throw new Error(data.error ?? "Failed to clear database");
+      }
+
+      // Clear localStorage
+      saveLeaders([]);
+      setLeaders([]);
+
+      await confirm({
+        title: "Database Cleared",
+        description: `Successfully deleted ${data.deleted ?? 0} leaders from the database. Your gallery has been reset.`,
+        confirmText: "OK",
+        cancelText: "",
+        variant: "default",
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Unknown error";
+      await confirm({
+        title: "Error",
+        description: `Failed to clear database: ${msg}`,
+        confirmText: "OK",
+        cancelText: "",
+        variant: "default",
+      });
+    }
+  }, [confirm]);
+
   const handleClearAll = React.useCallback(async () => {
     const confirmed = await confirm({
       title: "Delete All Leaders?",
@@ -726,14 +768,24 @@ export function LeadersGalleryApp() {
                 </Button>
 
                 {leaders.length > 0 && (
-                  <Button
-                    onClick={handleClearAll}
-                    variant="ghost"
-                    className="group h-12 gap-2.5 rounded-xl px-6 text-base font-semibold text-white/80 hover:text-white hover:bg-white/10 transition-all"
-                  >
-                    <Trash2 className="h-5 w-5 transition-transform duration-300 group-hover:scale-110" />
-                    Clear All
-                  </Button>
+                  <>
+                    <Button
+                      onClick={handleClearAll}
+                      variant="ghost"
+                      className="group h-12 gap-2.5 rounded-xl px-6 text-base font-semibold text-white/80 hover:text-white hover:bg-white/10 transition-all"
+                    >
+                      <Trash2 className="h-5 w-5 transition-transform duration-300 group-hover:scale-110" />
+                      Clear All
+                    </Button>
+                    <Button
+                      onClick={handleClearDatabase}
+                      variant="ghost"
+                      className="group h-12 gap-2.5 rounded-xl px-6 text-base font-semibold text-red-400/80 hover:text-red-400 hover:bg-red-400/10 transition-all"
+                    >
+                      <Trash2 className="h-5 w-5 transition-transform duration-300 group-hover:scale-110" />
+                      Clear Database
+                    </Button>
+                  </>
                 )}
                 
                 {leadersWithValidAvatars.length > 0 && (
