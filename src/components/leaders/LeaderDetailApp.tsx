@@ -927,6 +927,7 @@ export function LeaderDetailApp({ id }: { id: string }) {
           leaderId: leader.id,
           aspectRatio: "1:1",
           outputFormat: "png",
+          isRegeneration: !!profilePicUrl, // Generate varied avatar if regenerating
         }),
       });
 

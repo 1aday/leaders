@@ -10,6 +10,7 @@ type Body = {
   leaderId?: string;
   aspectRatio?: string;
   outputFormat?: string;
+  isRegeneration?: boolean;
 };
 
 export async function POST(req: Request) {
@@ -29,6 +30,7 @@ export async function POST(req: Request) {
     const promptResult = await generateAvatarPromptWithOpenAI({
       leaderJson,
       leaderId: body.leaderId,
+      isRegeneration: body.isRegeneration ?? false,
     });
 
     const img = await generateAvatarWithReplicate({

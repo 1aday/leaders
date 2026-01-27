@@ -43,9 +43,10 @@ const NEGATIVE_PROMPT = "illustration, cartoon, anime, 3d render, CGI, painterly
 function buildVisualAttributesPrompt(opts: {
   physical: AnyRecord | null;
   visualStyle: AnyRecord | null;
+  isRegeneration?: boolean;
 }): string {
-  const { physical, visualStyle } = opts;
-  
+  const { physical, visualStyle, isRegeneration } = opts;
+
   // Extract physical attributes
   const apparentAge = pickString(physical, "apparentAge");
   const genderPresentation = pickString(physical, "genderPresentation");
@@ -54,29 +55,43 @@ function buildVisualAttributesPrompt(opts: {
   const facialFeatures = pickString(physical, "facialFeatures");
   const typicalAttire = pickString(physical, "typicalAttire");
   const distinguishingFeatures = pickStringArray(physical, "distinguishingFeatures");
-  
+
   // Extract hair attributes
   const hair = physical && isPlainObject(physical.hair) ? (physical.hair as AnyRecord) : null;
-  const hairColor = pickString(hair, "color");
-  const hairStyle = pickString(hair, "style");
-  const hairLength = pickString(hair, "length");
-  
+  let hairColor = pickString(hair, "color");
+  let hairStyle = pickString(hair, "style");
+  let hairLength = pickString(hair, "length");
+
   // Extract eye attributes
   const eyes = physical && isPlainObject(physical.eyes) ? (physical.eyes as AnyRecord) : null;
-  const eyeColor = pickString(eyes, "color");
+  let eyeColor = pickString(eyes, "color");
   const eyeFeatures = pickString(eyes, "notableFeatures");
-  
+
   // Extract style attributes
   const moodEnergy = pickString(visualStyle, "moodEnergy");
-  
+
   // Extract color palette for accent colors
-  const colorPalette = visualStyle && isPlainObject(visualStyle.colorPalette) 
-    ? (visualStyle.colorPalette as AnyRecord) 
+  const colorPalette = visualStyle && isPlainObject(visualStyle.colorPalette)
+    ? (visualStyle.colorPalette as AnyRecord)
     : null;
-  const primaryColors = Array.isArray(colorPalette?.primary) 
+  const primaryColors = Array.isArray(colorPalette?.primary)
     ? (colorPalette.primary as Array<{ name?: string; hex?: string }>)
     : [];
   const accentColor = primaryColors[0]?.name || primaryColors[0]?.hex;
+
+  // When regenerating, add variation while keeping ethnicity/gender consistent
+  if (isRegeneration) {
+    // Randomize hair color/style for variety
+    const hairColors = ["black", "dark brown", "brown", "light brown", "auburn", "blonde", "gray", "salt and pepper"];
+    const hairStyles = ["straight", "wavy", "curly", "slicked back", "messy", "styled", "natural"];
+    const hairLengths = ["short", "medium", "long", "shoulder-length"];
+    const eyeColors = ["brown", "dark brown", "hazel", "blue", "green", "amber"];
+
+    hairColor = hairColors[Math.floor(Math.random() * hairColors.length)];
+    hairStyle = hairStyles[Math.floor(Math.random() * hairStyles.length)];
+    hairLength = hairLengths[Math.floor(Math.random() * hairLengths.length)];
+    eyeColor = eyeColors[Math.floor(Math.random() * eyeColors.length)];
+  }
   
   // Build the structured prompt parts
   const parts: string[] = [];
@@ -223,6 +238,7 @@ function isFamousPersonProfile(basedOnFamousPerson: boolean | undefined, tags: s
 export async function generateAvatarPromptWithOpenAI(opts: {
   leaderJson: unknown;
   leaderId?: string;
+  isRegeneration?: boolean;
 }): Promise<LeaderAvatarPromptResult> {
   const root = isPlainObject(opts.leaderJson) ? opts.leaderJson : null;
   const core = root && isPlainObject(root.coreIdentity) ? (root.coreIdentity as AnyRecord) : null;
@@ -234,23 +250,24 @@ export async function generateAvatarPromptWithOpenAI(opts: {
   const tags = pickStringArray(meta, "tags") ?? [];
   const name = pickString(core, "name");
   const vertical = pickString(meta, "vertical");
-  
+
   // Check the basedOnFamousPerson field (primary) or fall back to tags
-  const basedOnFamousPerson = core && typeof core.basedOnFamousPerson === "boolean" 
-    ? core.basedOnFamousPerson 
+  const basedOnFamousPerson = core && typeof core.basedOnFamousPerson === "boolean"
+    ? core.basedOnFamousPerson
     : undefined;
-  
+
   // Determine if this is a famous person
   const isFamous = isFamousPersonProfile(basedOnFamousPerson, tags);
-  
+
   let prompt: string;
-  
+
   if (isFamous && name) {
     // For famous people, just use the name - Nano Banana knows them
     prompt = buildFamousPersonPrompt(name, vertical);
   } else {
     // For fictional/non-famous leaders, build detailed prompt from visual attributes
-    prompt = buildVisualAttributesPrompt({ physical, visualStyle });
+    // Pass isRegeneration flag to add variety when regenerating
+    prompt = buildVisualAttributesPrompt({ physical, visualStyle, isRegeneration: opts.isRegeneration });
   }
 
   return {
