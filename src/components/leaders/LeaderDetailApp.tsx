@@ -648,27 +648,13 @@ export function LeaderDetailApp({ id }: { id: string }) {
   const sections = React.useMemo(() => {
     if (!root) return [];
     return Object.entries(root)
-      .filter(([k]) => k !== "$schema")
+      .filter(([k]) => k !== "$schema" && k !== "metadata") // Exclude metadata tab entirely
       .map(([key, value]) => {
         if (key === "coreIdentity" && isPlainObject(value)) {
           return {
             key,
             title: titleCase(key),
             value: omitKeys(value, ["name", "tagline", "profilePicUrl", "welcomeVideoUrl", "missionStatement"]),
-          };
-        }
-        if (key === "metadata" && isPlainObject(value)) {
-          return {
-            key,
-            title: titleCase(key),
-            value: omitKeys(value, [
-              "leadershipScores",
-              "bibleVersion",
-              "createdDate",
-              "lastModified",
-              "status",
-              "approvedBy",
-            ]),
           };
         }
         return { key, title: titleCase(key), value };
