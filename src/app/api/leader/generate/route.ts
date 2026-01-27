@@ -45,6 +45,47 @@ export async function POST(req: Request) {
           console.warn("[Supabase] Failed to persist leader generation:", e);
         }
 
+        // Auto-generate avatar (best-effort, don't block completion)
+        (async () => {
+          try {
+            // Extract leaderId from generated JSON
+            const parsed = JSON.parse(result.leader) as unknown;
+            const metadata = parsed && typeof parsed === "object" && "metadata" in (parsed as Record<string, unknown>)
+              ? (parsed as Record<string, unknown>).metadata
+              : null;
+            const leaderId = metadata && typeof metadata === "object" && "leaderId" in (metadata as Record<string, unknown>)
+              ? String((metadata as Record<string, unknown>).leaderId).replace(/\s+/g, "-").toUpperCase()
+              : null;
+
+            if (!leaderId) {
+              console.warn("[Avatar] Cannot auto-generate: no leaderId in generated JSON");
+              return;
+            }
+
+            // Call avatar API
+            const avatarRes = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/api/avatar`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                leaderRawJson: result.leader,
+                leaderId,
+                aspectRatio: "1:1",
+                outputFormat: "png",
+                isRegeneration: false,
+              }),
+            });
+
+            if (!avatarRes.ok) {
+              const err = await avatarRes.json().catch(() => ({}));
+              console.warn("[Avatar] Auto-generation failed:", err);
+            } else {
+              console.log("[Avatar] Auto-generated successfully for", leaderId);
+            }
+          } catch (err) {
+            console.warn("[Avatar] Auto-generation error:", err);
+          }
+        })();
+
         // Send final result
         const sseData = `data: ${JSON.stringify({ type: "complete", leader: result.leader, model: result.model })}\n\n`;
         writer.write(encoder.encode(sseData));
