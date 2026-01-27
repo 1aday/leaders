@@ -322,14 +322,14 @@ function CopyButton({ text, label }: { text: string; label?: string }) {
 // Long Text Block
 function LongTextBlock({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl bg-muted/30 p-5">
-      <div className="mb-2 flex items-center justify-between">
-        <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+    <div className="rounded-xl bg-muted/10 p-6 border border-border/30">
+      <div className="mb-3 flex items-center justify-between">
+        <span className="text-sm font-semibold text-foreground/70">
           {label}
         </span>
         <CopyButton text={value} />
       </div>
-      <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground/90">
+      <p className="whitespace-pre-wrap text-base leading-relaxed text-foreground">
         {value}
       </p>
     </div>
@@ -339,14 +339,14 @@ function LongTextBlock({ label, value }: { label: string; value: string }) {
 // Color Swatch
 function ColorSwatch({ name, hex }: { name: string; hex: string }) {
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex items-center gap-4 p-3 rounded-lg border border-border/30 hover:bg-accent/5 transition-colors">
       <div
-        className="h-8 w-8 rounded-lg shadow-inner"
+        className="h-10 w-10 rounded-lg shadow-sm border border-border/40"
         style={{ backgroundColor: hex }}
       />
       <div className="min-w-0 flex-1">
-        <div className="text-sm text-foreground">{name}</div>
-        <div className="font-mono text-xs text-muted-foreground">{hex}</div>
+        <div className="text-base font-medium text-foreground">{name}</div>
+        <div className="font-mono text-sm text-muted-foreground">{hex}</div>
       </div>
       <CopyButton text={hex} />
     </div>
@@ -365,7 +365,7 @@ function Section({
 }) {
   return (
     <div className={className}>
-      <h3 className="mb-3 text-sm font-medium text-muted-foreground">
+      <h3 className="mb-4 text-base font-semibold text-foreground/80">
         {title}
       </h3>
       {children}
@@ -383,19 +383,19 @@ function RenderValue({ value, depth = 0 }: { value: unknown; depth?: number }) {
     if (value.length > 200) {
       return <LongTextBlock label="Content" value={value} />;
     }
-    return <span className="text-foreground/90">{value}</span>;
+    return <span className="text-base text-foreground">{value}</span>;
   }
 
   if (typeof value === "number" || typeof value === "boolean") {
-    return <span className="font-mono text-foreground/90">{String(value)}</span>;
+    return <span className="font-mono text-base text-foreground">{String(value)}</span>;
   }
 
   if (Array.isArray(value)) {
     if (value.every((v) => typeof v === "string")) {
       return (
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-2">
           {(value as string[]).map((v, i) => (
-            <Badge key={i} variant="secondary" className="rounded-full text-xs font-normal">
+            <Badge key={i} variant="secondary" className="rounded-full text-sm font-normal px-3 py-1">
               {v}
             </Badge>
           ))}
@@ -414,7 +414,7 @@ function RenderValue({ value, depth = 0 }: { value: unknown; depth?: number }) {
     return (
       <div className="space-y-3">
         {value.map((item, i) => (
-          <div key={i} className="rounded-lg bg-muted/20 p-3">
+          <div key={i} className="rounded-xl bg-muted/10 p-4 border border-border/30">
             <RenderValue value={item} depth={depth + 1} />
           </div>
         ))}
@@ -432,19 +432,28 @@ function RenderValue({ value, depth = 0 }: { value: unknown; depth?: number }) {
     );
 
     return (
-      <div className="space-y-4">
+      <div className="space-y-6">
         {scalars.length > 0 && (
-          <div className="space-y-2">
-            {scalars.map(([k, v]) => (
-              <div key={k} className="flex items-start gap-4 py-1">
-                <span className="text-xs text-muted-foreground shrink-0">{titleCase(k)}</span>
-                <span className="text-sm text-foreground/90 text-left">{String(v)}</span>
-              </div>
-            ))}
+          <div className="rounded-xl border border-border/40 overflow-hidden">
+            <div className="divide-y divide-border/30">
+              {scalars.map(([k, v], idx) => (
+                <div
+                  key={k}
+                  className="grid grid-cols-[200px_1fr] gap-6 px-6 py-4 hover:bg-accent/5 transition-colors"
+                >
+                  <span className="text-base font-medium text-muted-foreground">
+                    {titleCase(k)}
+                  </span>
+                  <span className="text-base text-foreground">
+                    {String(v)}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
         {complex.map(([k, v]) => (
-          <Section key={k} title={titleCase(k)} className="mt-5 pt-4 border-t border-border/40">
+          <Section key={k} title={titleCase(k)} className="mt-6 pt-6 border-t border-border/40">
             <RenderValue value={v} depth={depth + 1} />
           </Section>
         ))}
@@ -1235,9 +1244,9 @@ export function LeaderDetailApp({ id }: { id: string }) {
             {/* Generation Buttons */}
             <div className="flex gap-2">
               <Button
-                variant="default"
+                variant="outline"
                 size="sm"
-                className="flex-1 gap-2 rounded-xl h-10"
+                className="flex-1 gap-2 rounded-xl h-10 border-primary/20 hover:bg-primary/10 hover:border-primary/30 transition-colors"
                 onClick={handleGenerateAvatar}
                 disabled={generatingAvatar || loadingPromptPreview}
               >
@@ -1248,7 +1257,7 @@ export function LeaderDetailApp({ id }: { id: string }) {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="flex-1 gap-2 rounded-xl h-10"
+                  className="flex-1 gap-2 rounded-xl h-10 border-primary/20 hover:bg-primary/10 hover:border-primary/30 transition-colors"
                   onClick={handleGenerateIntroVideo}
                   disabled={generatingIntroVideo}
                 >
@@ -1705,7 +1714,7 @@ export function LeaderDetailApp({ id }: { id: string }) {
 
                   {sections.map((s) => (
                     <TabsContent key={s.key} value={s.key} className="mt-0 text-left">
-                      <div className="rounded-2xl bg-muted/20 p-6 text-left">
+                      <div className="rounded-2xl bg-muted/10 p-8 text-left">
                         <RenderValue value={s.value} />
                       </div>
                     </TabsContent>
