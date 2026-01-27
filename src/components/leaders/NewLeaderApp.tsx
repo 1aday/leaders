@@ -272,7 +272,9 @@ export function NewLeaderApp() {
                 const json = JSON.parse(jsonStr) as { type: string; percentage?: number; leader?: unknown; error?: string };
 
                 if (json.type === "progress") {
-                  setGenProgress(json.percentage || 0);
+                  const percentage = Math.min(99, Math.max(0, Math.round(json.percentage || 0)));
+                  console.log(`[Progress] ${percentage}%`);
+                  setGenProgress(percentage);
                 } else if (json.type === "complete") {
                   const leader = json.leader;
                   if (!leader) throw new Error("API returned no leader JSON");
@@ -546,7 +548,7 @@ export function NewLeaderApp() {
                           )}
                         </Button>
                       </div>
-                      {generatingMode === "random" && genProgress > 0 && (
+                      {generatingMode === "random" && (
                         <div className="mt-3 space-y-2">
                           <div className="flex items-center justify-between text-sm">
                             <span className="text-muted-foreground">Generating...</span>
@@ -620,7 +622,7 @@ export function NewLeaderApp() {
                         )}
                       </Button>
                     </div>
-                    {generatingMode === "custom" && genProgress > 0 && (
+                    {generatingMode === "custom" && (
                       <div className="space-y-2">
                         <div className="flex items-center justify-between text-sm">
                           <span className="text-muted-foreground">Generating Leader Bible...</span>
