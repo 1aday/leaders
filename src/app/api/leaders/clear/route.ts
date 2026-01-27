@@ -15,7 +15,12 @@ export async function DELETE() {
     const supabase = getSupabaseAdmin();
 
     // Delete all leaders (FK cascades will delete related assets + chat logs)
-    const { data, error } = await supabase.from("leaders").delete().neq("id", 0).select("id");
+    // Use gt with a timestamp to match all rows (created_at is always present)
+    const { data, error } = await supabase
+      .from("leaders")
+      .delete()
+      .gt("created_at", "1970-01-01")
+      .select("id");
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
