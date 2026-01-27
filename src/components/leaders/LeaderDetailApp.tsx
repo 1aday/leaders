@@ -557,15 +557,53 @@ export function LeaderDetailApp({ id }: { id: string }) {
     }
   }, [chatMessages, leader]);
 
-  // Auto-scroll chat to bottom when new messages arrive
+  // Intelligent auto-scroll: only scroll if user is already at bottom
+  const [isUserScrolledUp, setIsUserScrolledUp] = React.useState(false);
+  const lastScrollTopRef = React.useRef(0);
+
+  // Check if user is at bottom of chat
+  const checkIfAtBottom = React.useCallback(() => {
+    const el = chatScrollRef.current;
+    if (!el) return true;
+    const threshold = 50; // pixels from bottom
+    const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
+    return isAtBottom;
+  }, []);
+
+  // Track user scroll intent
+  const handleChatScroll = React.useCallback(() => {
+    const el = chatScrollRef.current;
+    if (!el) return;
+
+    const isAtBottom = checkIfAtBottom();
+    const scrollingUp = el.scrollTop < lastScrollTopRef.current;
+
+    lastScrollTopRef.current = el.scrollTop;
+
+    // User is scrolled up if they're not at bottom
+    setIsUserScrolledUp(!isAtBottom);
+  }, [checkIfAtBottom]);
+
+  // Auto-scroll only if user hasn't scrolled up
   React.useEffect(() => {
-    if (chatScrollRef.current) {
+    if (chatScrollRef.current && !isUserScrolledUp) {
       chatScrollRef.current.scrollTo({
         top: chatScrollRef.current.scrollHeight,
         behavior: "smooth",
       });
     }
-  }, [chatMessages]);
+  }, [chatMessages, isUserScrolledUp]);
+
+  // Scroll to bottom on demand
+  const scrollChatToBottom = () => {
+    if (chatScrollRef.current) {
+      chatScrollRef.current.scrollTo({
+        top: chatScrollRef.current.scrollHeight,
+        behavior: "smooth",
+      });
+      setIsUserScrolledUp(false);
+    }
+  };
 
   const [generatingAvatar, setGeneratingAvatar] = React.useState(false);
   const [avatarError, setAvatarError] = React.useState<string | null>(null);
@@ -1580,9 +1618,21 @@ export function LeaderDetailApp({ id }: { id: string }) {
                 </div>
               )}
 
-              <div className="rounded-2xl border border-border/40 bg-card/30">
-                <div 
+              <div className="rounded-2xl border border-border/40 bg-card/30 relative">
+                {/* Scroll to bottom button - appears when user scrolls up */}
+                {isUserScrolledUp && (
+                  <button
+                    type="button"
+                    onClick={scrollChatToBottom}
+                    className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 px-4 py-2 rounded-full bg-primary text-primary-foreground shadow-lg hover:shadow-xl transition-all duration-200 text-sm font-medium animate-in fade-in-0 slide-in-from-bottom-2"
+                  >
+                    <ChevronDown className="h-4 w-4" />
+                    New messages
+                  </button>
+                )}
+                <div
                   ref={chatScrollRef}
+                  onScroll={handleChatScroll}
                   className="max-h-[400px] overflow-y-auto scroll-smooth overscroll-contain scrollbar-thin"
                 >
                   <div className="space-y-4 p-6 min-h-[120px]">
