@@ -580,7 +580,7 @@ export function LeadersGalleryApp() {
         description: `Successfully deleted ${data.deleted ?? 0} leaders from the database. Your gallery has been reset.`,
         confirmText: "OK",
         cancelText: "",
-        variant: "default",
+        variant: "info",
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Unknown error";
@@ -589,7 +589,7 @@ export function LeadersGalleryApp() {
         description: `Failed to clear database: ${msg}`,
         confirmText: "OK",
         cancelText: "",
-        variant: "default",
+        variant: "danger",
       });
     }
   }, [confirm]);
@@ -640,7 +640,7 @@ export function LeadersGalleryApp() {
         description: `${failedCount} leader(s) could not be deleted from the cloud database. They have been removed locally and won't sync back on this device, but may still be accessible via direct URL or from other devices.`,
         confirmText: "OK",
         cancelText: "",
-        variant: "default",
+        variant: "warning",
       });
     }
   }, [leaders, confirm]);
