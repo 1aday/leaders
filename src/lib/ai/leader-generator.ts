@@ -93,50 +93,123 @@ export type GenerateLeaderBibleResult = {
  * - Non-exploitative, trust-building
  */
 const RANDOM_LEADER_ARCHETYPES = [
-  // Finance/Investing
+  // Finance/Investing (12)
   { name: "", description: "A calm, analytical personal finance guide who helps beginners build wealth through simple index fund investing and budgeting. Anti-hype, pro-patience. Speaks in clear analogies." },
   { name: "", description: "A no-nonsense small business financial advisor who helps entrepreneurs understand cash flow, pricing, and sustainable growth. Direct but supportive tone." },
   { name: "", description: "A crypto-skeptic blockchain educator who explains the technology honestly—both opportunities and risks—without shilling or FUD." },
-  
-  // Health/Fitness
+  { name: "", description: "A debt-free journey coach who helps people develop realistic plans to eliminate debt without shame or judgment. Empowering, practical." },
+  { name: "", description: "A tax optimization strategist for freelancers and contractors explaining deductions and quarterly payments. Detail-oriented but approachable." },
+  { name: "", description: "A real estate investing educator focused on rental properties and house hacking for beginners. Skeptical of 'get rich quick' schemes." },
+  { name: "", description: "A retirement planning guide helping people in their 30s-40s understand 401(k)s, IRAs, and compound interest. Patient, numbers-driven." },
+  { name: "", description: "A side hustle economics expert teaching sustainable ways to earn extra income without burnout. Realistic about time investment." },
+  { name: "", description: "A frugality coach who celebrates creative money-saving without deprivation. Finds joy in resourcefulness, not restriction." },
+  { name: "", description: "A college financial aid navigator helping families understand FAFSA, scholarships, and student loan options. Demystifies complexity." },
+  { name: "", description: "An estate planning educator making wills, trusts, and inheritance accessible to regular families. Gentle about mortality, practical." },
+  { name: "", description: "A salary negotiation coach helping professionals advocate for fair compensation. Data-driven, confidence-building, anti-imposter syndrome." },
+
+  // Health/Fitness (15)
   { name: "", description: "A science-based fitness coach who cuts through gym bro-science with evidence-backed training advice. Warm, encouraging, cites studies." },
   { name: "", description: "A practical nutrition guide focused on sustainable eating habits, not fad diets. Anti-restriction, pro-balance. Speaks like a supportive friend." },
   { name: "", description: "A sleep optimization specialist who helps busy professionals fix their sleep without expensive gadgets. Calm, methodical, solution-focused." },
-  
-  // Business/Entrepreneurship  
+  { name: "", description: "A running coach for absolute beginners helping people go from couch to 5K. Celebrates slow progress, injury prevention focus." },
+  { name: "", description: "A yoga instructor demystifying the practice for skeptics and athletes. Emphasizes physical benefits over spiritual aspects." },
+  { name: "", description: "A posture and mobility expert helping desk workers undo computer hunch. Simple daily exercises, ergonomics advice." },
+  { name: "", description: "A strength training guide for women over 40 focused on bone density and longevity. Empowering, evidence-based." },
+  { name: "", description: "A hydration and electrolyte educator explaining water intake, sodium, and athletic performance. Scientific but accessible." },
+  { name: "", description: "A meal prep strategist for busy families making batch cooking and freezer meals less overwhelming. Time-efficient, flexible." },
+  { name: "", description: "A gut health guide explaining probiotics, fiber, and digestive wellness without pseudoscience. Research-backed, no miracle cures." },
+  { name: "", description: "A chronic pain management coach teaching evidence-based coping strategies. Compassionate, validates struggles, offers hope." },
+  { name: "", description: "A women's health educator covering hormones, menstrual cycles, and perimenopause. Frank, destigmatizing, medically accurate." },
+  { name: "", description: "A men's health advocate discussing prostate health, testosterone, and mental wellness. Breaks masculine silence, encourages check-ups." },
+  { name: "", description: "A supplement skeptic explaining what actually works (vitamin D, omega-3) vs. marketing hype. Saves people money." },
+  { name: "", description: "A body neutrality coach helping people develop healthier relationships with their bodies. Anti-diet culture, pro-function over appearance." },
+
+  // Business/Entrepreneurship (12)
   { name: "", description: "A bootstrapping mentor for first-time founders who want to build profitable businesses without VC funding. Pragmatic, frugal, anti-hustle-culture." },
   { name: "", description: "A remote work productivity expert helping distributed teams communicate and collaborate effectively. Systems-focused, empathetic to async challenges." },
   { name: "", description: "A career transition coach specializing in helping people pivot industries after 30. Encouraging but realistic about the journey." },
-  
-  // Technology
+  { name: "", description: "A freelance business coach teaching sustainable client acquisition and pricing. Honest about feast-famine cycles, boundary-setting." },
+  { name: "", description: "A LinkedIn strategy guide for professionals who hate self-promotion. Authentic engagement over performative posting." },
+  { name: "", description: "A solopreneur operations expert helping one-person businesses systemize and automate. Efficiency without losing personal touch." },
+  { name: "", description: "A nonprofit fundraising strategist teaching grant writing and donor cultivation. Mission-driven, sustainable revenue focus." },
+  { name: "", description: "A workplace communication specialist helping employees navigate difficult coworkers and managers. Diplomatic but assertive." },
+  { name: "", description: "A leadership development coach for new managers overwhelmed by people management. Humanizes leadership, teaches feedback skills." },
+  { name: "", description: "A networking coach for introverts making professional connections feel less transactional. Quality over quantity." },
+  { name: "", description: "A business email writing guide teaching clear, professional communication. Cuts corporate jargon, values clarity." },
+  { name: "", description: "A pricing psychology educator helping service providers charge what they're worth. Tackles undervaluing and money mindset." },
+
+  // Technology (10)
   { name: "", description: "A beginner-friendly coding mentor who teaches programming through building real projects. Patient, celebrates small wins, demystifies tech jargon." },
   { name: "", description: "A cybersecurity educator who helps regular people protect themselves online without paranoia. Practical, not fear-mongering." },
   { name: "", description: "An AI literacy guide who explains machine learning concepts to non-technical audiences. Honest about both capabilities and limitations." },
-  
-  // Mental Health/Wellbeing
+  { name: "", description: "A digital privacy advocate teaching VPNs, password managers, and data protection. Balances security with usability." },
+  { name: "", description: "A web accessibility educator making inclusive design understandable for developers and designers. Empathy-driven, standards-focused." },
+  { name: "", description: "A spreadsheet wizard teaching Excel/Google Sheets formulas and automation for non-technical workers. Unlocks productivity." },
+  { name: "", description: "A tech career advisor helping bootcamp grads and self-taught developers land their first jobs. Portfolio over pedigree." },
+  { name: "", description: "A smartphone setup guide helping seniors and tech novices use their devices confidently. Patient, jargon-free." },
+  { name: "", description: "A data literacy educator teaching everyday people to read charts, spot manipulation, and question statistics. Critical thinking focus." },
+  { name: "", description: "A video conferencing coach helping remote workers look professional on Zoom. Lighting, framing, audio, engagement tips." },
+
+  // Mental Health/Wellbeing (12)
   { name: "", description: "A stress management coach using evidence-based techniques like CBT and mindfulness. Warm, non-judgmental, respects therapy boundaries." },
   { name: "", description: "A burnout recovery specialist for high-achievers who need to rebuild sustainable work habits. Direct but compassionate." },
   { name: "", description: "An anxiety educator who shares coping strategies and destigmatizes mental health struggles. Relatable, research-informed." },
-  
-  // Education/Learning
+  { name: "", description: "A grief support guide helping people navigate loss with practical coping mechanisms. Gentle, validating, no toxic positivity." },
+  { name: "", description: "A ADHD productivity strategist teaching systems that work with ADHD brains, not against them. Neurodivergent-friendly." },
+  { name: "", description: "A perfectionism recovery coach helping people embrace 'good enough' and reduce self-imposed pressure. Liberating, compassionate." },
+  { name: "", description: "A loneliness and social isolation educator teaching connection-building skills for adults. Normalizes struggle, actionable steps." },
+  { name: "", description: "A therapy preparation guide helping people get the most from counseling sessions. Homework ideas, question prompts." },
+  { name: "", description: "A morning routine optimizer helping night owls find rhythms that work for them. No 5am wake-up cult." },
+  { name: "", description: "A seasonal affective disorder coach teaching light therapy, vitamin D, and winter coping strategies. Science-based, validating." },
+  { name: "", description: "A digital detox strategist helping people develop healthier relationships with technology. Balanced, not all-or-nothing." },
+  { name: "", description: "A self-compassion teacher helping people talk to themselves with kindness. Evidence-based, not fluffy." },
+
+  // Education/Learning (9)
   { name: "", description: "A learning strategy expert who teaches people how to learn effectively—spaced repetition, active recall, note-taking systems. Enthusiastic and nerdy." },
   { name: "", description: "A public speaking coach who helps introverts and anxious speakers find their voice. Supportive, technique-focused." },
   { name: "", description: "A critical thinking guide who teaches media literacy and how to evaluate information online. Socratic, non-partisan." },
-  
-  // Relationships/Communication
+  { name: "", description: "A memory improvement trainer teaching mnemonic techniques and memory palaces. Practical applications for students and professionals." },
+  { name: "", description: "A reading comprehension coach helping adults improve speed and retention. No shame about reading level." },
+  { name: "", description: "A test-taking strategist for standardized exams (SAT, GRE, professional licenses). Stress management and technique." },
+  { name: "", description: "A foreign language learning guide teaching immersion techniques and consistent practice habits. Anti-Duolingo streak anxiety." },
+  { name: "", description: "A homeschool curriculum advisor helping parents navigate educational choices. Flexible approaches, diverse learning styles." },
+  { name: "", description: "A lifelong learning evangelist encouraging curiosity and skill-building after formal education ends. Growth mindset, low pressure." },
+
+  // Relationships/Communication (10)
   { name: "", description: "A communication skills coach for professional settings—difficult conversations, negotiation, feedback. Direct, actionable frameworks." },
   { name: "", description: "A relationship educator focused on healthy communication patterns for couples. Research-based, non-preachy, inclusive." },
   { name: "", description: "A boundaries and assertiveness coach helping people-pleasers advocate for themselves. Empathetic but firm." },
-  
-  // Lifestyle/Personal Development
+  { name: "", description: "A conflict resolution mediator teaching de-escalation and finding common ground. Neutral, practical dialogue skills." },
+  { name: "", description: "A friendship maintenance guide for busy adults struggling to stay connected. Realistic expectations, quality time ideas." },
+  { name: "", description: "A dating communication strategist helping people express needs and read green/red flags. Honest, safety-conscious." },
+  { name: "", description: "A family boundary-setting coach for adult children navigating complicated parent relationships. Validating, guilt-reduction." },
+  { name: "", description: "An active listening trainer teaching presence and empathy in conversations. Reduces fixing/advising reflex." },
+  { name: "", description: "A difficult people navigator helping folks deal with toxic coworkers, relatives, and neighbors. Survival strategies, gray rock method." },
+  { name: "", description: "A small talk survival guide for people who dread networking events and elevator conversations. Templates and escape routes." },
+
+  // Lifestyle/Personal Development (12)
   { name: "", description: "A minimalism guide focused on intentional living—decluttering, simplifying decisions, finding what matters. Calm, philosophical, not preachy." },
   { name: "", description: "A time management specialist for overwhelmed professionals—systems, priorities, saying no. Structured but flexible." },
   { name: "", description: "A creative hobby encourager who helps busy adults rediscover play and artistic expression. Playful, low-pressure, process-focused." },
-  
-  // Niche/Unique
+  { name: "", description: "A habit formation coach teaching atomic habits and behavior change. Evidence-based, celebrates tiny wins." },
+  { name: "", description: "A morning pages and journaling guide for people who hate journaling. Removes pressure, multiple formats." },
+  { name: "", description: "A decision fatigue reducer teaching simplified wardrobe, meal planning, and routine automation. Mental energy conservation." },
+  { name: "", description: "A gratitude practice skeptic who finds evidence-based benefits without toxic positivity. Practical appreciation exercises." },
+  { name: "", description: "A procrastination understanding coach examining root causes (fear, perfectionism, unclear goals). Compassionate problem-solving." },
+  { name: "", description: "A goal-setting realist teaching SMART goals and anti-resolution culture. Sustainable progress over January burnout." },
+  { name: "", description: "A rest and recovery advocate helping workaholics learn to do nothing productively. Permission to pause." },
+  { name: "", description: "A identity exploration guide for people feeling stuck or lost in life transitions. Reflective questions, value clarification." },
+  { name: "", description: "A multi-generational household mediator helping families navigate living together. Cultural sensitivity, boundary negotiation." },
+
+  // Niche/Unique (8)
   { name: "", description: "A personal historian who helps people document family stories and create meaningful legacy projects. Warm, nostalgic, detail-oriented." },
   { name: "", description: "A home cook mentor focused on building confidence in the kitchen through simple, flexible recipes. Encouraging, practical, celebrates imperfection." },
   { name: "", description: "A neighborhood community builder who shares strategies for fostering local connections and civic engagement. Optimistic, practical, inclusive." },
+  { name: "", description: "A capsule wardrobe consultant helping people build versatile, sustainable closets. Style clarity, reduced decision fatigue." },
+  { name: "", description: "A pet behavior specialist teaching positive reinforcement training for dogs and cats. Patient, science-based, no dominance myths." },
+  { name: "", description: "A houseplant care guide for serial plant killers. Forgiving, troubleshooting focus, celebrates alive plants." },
+  { name: "", description: "A letter-writing revivalist teaching the art of handwritten correspondence and meaningful communication. Nostalgic, intentional connection." },
+  { name: "", description: "A sustainable living pragmatist teaching imperfect environmentalism—small changes that actually stick. No eco-shaming." },
 ];
 
 /**
@@ -945,34 +1018,33 @@ CRITICAL NAME RULE:
 - If the user provides a name in the Description field, extract and use it as coreIdentity.name
 - Historical figures, controversial people, fictional villains - all should use their real names
 
-CULTURAL NAME GENERATION:
-- When generating a name, consider the Leader's ethnicity and gender presentation
-- Generate names that are culturally authentic and appropriate
-- Examples of culturally matched names:
-  * Japanese Female: "Yuki Tanaka", "Sakura Nakamura", "Akiko Yamamoto"
-  * Japanese Male: "Kenji Sato", "Hiroshi Tanaka", "Takeshi Yamada"
-  * Nigerian Male: "Adebayo Okafor", "Chukwudi Nwosu", "Oluwaseun Adeyemi"
-  * Nigerian Female: "Amara Okafor", "Chioma Nwosu", "Folake Adeyemi"
-  * Mexican Female: "Sofia Martinez", "Gabriela Rodriguez", "Isabella Hernandez"
-  * Mexican Male: "Diego Martinez", "Carlos Rodriguez", "Miguel Hernandez"
-  * Indian Female: "Priya Sharma", "Ananya Patel", "Kavya Reddy"
-  * Indian Male: "Rahul Sharma", "Arjun Patel", "Rohan Reddy"
-  * Chinese Female: "Wei Chen", "Li Wang", "Mei Zhang"
-  * Chinese Male: "Wei Chen", "Jun Wang", "Feng Zhang"
-  * Korean Female: "Ji-won Kim", "Soo-jin Park", "Min-ji Lee"
-  * Korean Male: "Min-ho Kim", "Jae-sung Park", "Hyun-woo Lee"
-  * Arabic/Middle Eastern Male: "Omar Hassan", "Karim Al-Fahad", "Youssef Malik"
-  * Arabic/Middle Eastern Female: "Layla Hassan", "Noor Al-Fahad", "Amina Malik"
-  * British Female: "Emma Thompson", "Olivia Clarke", "Charlotte Wilson"
-  * British Male: "Oliver Brown", "Harry Davies", "George Taylor"
-  * French Female: "Sophie Dubois", "Camille Martin", "Amélie Bernard"
-  * French Male: "Louis Dubois", "Antoine Martin", "Pierre Bernard"
-  * Italian Female: "Giulia Rossi", "Francesca Romano", "Chiara Bianchi"
-  * Italian Male: "Marco Rossi", "Alessandro Romano", "Matteo Bianchi"
-- Use given names and surnames that are common in the specified ethnicity
-- Avoid stereotypes - use authentic names that real people from that culture have
+CULTURAL NAME GENERATION - UNIQUENESS CRITICAL:
+- CRITICAL: Generate a UNIQUE name you have never used before
+- DO NOT reuse any of these example names - they are just patterns to follow:
+  * Japanese: "Yuki Tanaka" pattern → but use different names like "Haruka Kobayashi", "Ren Watanabe"
+  * Nigerian: "Adebayo Okafor" pattern → but use different names like "Oluwa Emeka", "Zainab Adeleke"
+  * Mexican: "Sofia Martinez" pattern → but use different names like "Valentina Reyes", "Mateo Vargas"
+  * Indian: "Priya Sharma" pattern → but use different names like "Aisha Kapoor", "Dev Gupta"
+  * Chinese: "Wei Chen" pattern → but use different names like "Lin Wu", "Jing Liu"
+  * Korean: "Ji-won Kim" pattern → but use different names like "Hae-won Choi", "Sung-min Kang"
+  * Arabic/Middle Eastern: "Omar Hassan" pattern → but use different names like "Tariq Rashid", "Jasmine Yousef"
+  * British: "Emma Thompson" pattern → but use different names like "Ruby Cooper", "Thomas Bennett"
+  * French: "Sophie Dubois" pattern → but use different names like "Léa Moreau", "Jules Laurent"
+  * Italian: "Giulia Rossi" pattern → but use different names like "Elena Ferrari", "Lorenzo Conti"
+  * Scandinavian: Use names like "Freya Andersson", "Bjorn Olsen", "Astrid Hansen"
+  * Brazilian: Use names like "Isabela Silva", "Lucas Santos", "Marina Costa"
+  * Russian: Use names like "Anastasia Volkov", "Dmitri Petrov", "Ekaterina Sokolov"
+  * South African: Use names like "Thabo Ndlovu", "Naledi Khumalo", "Sipho Mthembu"
+  * Vietnamese: Use names like "Linh Nguyen", "Tuan Pham", "Mai Tran"
+  * Thai: Use names like "Pim Srisai", "Arthit Pongsakorn", "Apinya Charoensuk"
+  * Indonesian: Use names like "Sari Wijaya", "Adi Santoso", "Devi Putri"
+  * Turkish: Use names like "Elif Yilmaz", "Mehmet Demir", "Zeynep Kaya"
+- Use given names and surnames that are common but NOT the exact examples above
+- Each leader should feel like a distinct individual with their own name
+- Randomization key: ${Date.now() % 10000} - use this to vary your name choices
+- Avoid patterns: don't make all finance leaders male or all wellness leaders female
 - If ethnicity is "Mixed" or "Multiracial", choose a name that could plausibly reflect that background
-- If gender is "Non-binary", choose culturally appropriate gender-neutral names
+- If gender is "Non-binary", choose culturally appropriate gender-neutral names or modern names that work across genders
 
 INTEGRITY STANDARD (alignment rules):
 - Transparency: the leader MUST explicitly state they are AI-powered in the backstory.transparencyStatement field.
@@ -1216,12 +1288,21 @@ Other Requirements:
 - Write a comprehensive system prompt for LLM content generation
 - Provide sample outputs showing the Leader's voice
 
-Cultural Name Matching:
+Cultural Name Matching & Demographic Diversity:
 - CRITICAL: The name MUST be culturally appropriate for the ethnicity and gender specified
-- When generating visualIdentity.physicalDescription, choose a specific ethnicity
+- When generating visualIdentity.physicalDescription, choose a specific ethnicity RANDOMLY - don't associate domains with demographics
+- DEMOGRAPHIC RANDOMIZATION RULES:
+  * Finance leaders can be ANY ethnicity and gender (not just male, not just Western)
+  * Technology leaders can be ANY ethnicity and gender (not just male, not just Asian)
+  * Health/wellness leaders can be ANY ethnicity and gender (not just female)
+  * ALL domains should have maximum demographic diversity
+  * Use randomization key ${Date.now() % 10000} to vary your demographic choices
+  * Aim for balanced representation: ~50% women, ~50% men, ~5% non-binary across all generations
+  * Rotate through different ethnicities: East Asian, South Asian, African, Latin American, Middle Eastern, European, Southeast Asian, etc.
 - Then generate a name in coreIdentity.name that matches that ethnicity and genderPresentation
 - Use common given names and surnames from that culture
 - For famous people (basedOnFamousPerson = true), skip cultural logic and use their actual name
+- NEVER associate domain/vertical with specific demographic patterns
 
 Return the complete JSON matching the schema.`;
 
