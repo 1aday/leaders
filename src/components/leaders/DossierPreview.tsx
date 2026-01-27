@@ -151,7 +151,8 @@ export function DossierPreview({ value }: Props) {
   const character = typeof scores?.character === "number" ? scores.character : undefined;
   const competence = typeof scores?.competence === "number" ? scores.competence : undefined;
   const impact = typeof scores?.impact === "number" ? scores.impact : undefined;
-  const composite = calculateCompositeScore(character, competence, impact);
+  const jobsRuleMultiplier = typeof scores?.jobsRuleMultiplier === "number" ? scores.jobsRuleMultiplier : 1.0;
+  const composite = calculateCompositeScore(character, competence, impact, jobsRuleMultiplier);
 
   const primaryColors = Array.isArray(colorPalette?.primary)
     ? (colorPalette.primary as Array<{ name: string; hex: string }>)

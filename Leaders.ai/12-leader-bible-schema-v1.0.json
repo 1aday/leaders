@@ -1,0 +1,1058 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://nodewizards.com/schemas/leader-bible-v1.0.json",
+  "title": "Leader Bible Schema",
+  "description": "Complete input specification for AI Leader generation in the Sovereign Influence Engine",
+  "version": "1.0",
+  "type": "object",
+  "required": [
+    "metadata",
+    "coreIdentity",
+    "visualIdentity",
+    "voiceIdentity",
+    "videoIdentity",
+    "personalityMatrix",
+    "expertiseDomain",
+    "communicationStyle",
+    "backstory",
+    "valuesWorldview",
+    "boundariesGuardrails",
+    "behavioralProtocols",
+    "audienceRelationship",
+    "contentPillars",
+    "llmPrompts"
+  ],
+  "properties": {
+    "metadata": {
+      "type": "object",
+      "description": "System tracking and classification data",
+      "required": ["leaderId", "bibleVersion", "vertical", "status"],
+      "properties": {
+        "leaderId": {
+          "type": "string",
+          "description": "Unique identifier for this Leader",
+          "pattern": "^[A-Z0-9-]+$",
+          "examples": ["MAYA-SATO-BTC-001"]
+        },
+        "bibleVersion": {
+          "type": "string",
+          "description": "Version of this Leader Bible",
+          "pattern": "^\\d+\\.\\d+$",
+          "examples": ["1.0"]
+        },
+        "createdDate": {
+          "type": "string",
+          "format": "date",
+          "description": "Date this Bible was created"
+        },
+        "lastModified": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp of last modification"
+        },
+        "vertical": {
+          "type": "string",
+          "description": "Primary domain/vertical for this Leader",
+          "enum": [
+            "Finance",
+            "Health",
+            "Business",
+            "Technology",
+            "Education",
+            "Lifestyle",
+            "Legal",
+            "MentalHealth",
+            "Relationships",
+            "Other"
+          ]
+        },
+        "subDomains": {
+          "type": "array",
+          "description": "Specific sub-areas within the vertical",
+          "items": { "type": "string" },
+          "examples": [["Education", "Investing", "Sovereignty", "Technical", "MacroEconomics"]]
+        },
+        "status": {
+          "type": "string",
+          "description": "Current status of this Leader Bible",
+          "enum": ["Draft", "Review", "Approved", "Active", "Retired"]
+        },
+        "approvedBy": {
+          "type": "string",
+          "description": "Name of person who approved this Bible"
+        },
+        "leadershipScores": {
+          "type": "object",
+          "description": "Target scores from Leadership Definition framework",
+          "properties": {
+            "character": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100,
+              "description": "Character pillar score (integrity, empathy, vulnerability, accountability, consistency)"
+            },
+            "competence": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100,
+              "description": "Competence pillar score (vision, expertise, communication, courage)"
+            },
+            "impact": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100,
+              "description": "Impact pillar score (value creation, trustworthiness, results)"
+            },
+            "jobsRuleMultiplier": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Jobs Rule modifier (1.0 = exemplary, 0.5 = significant flaws, 0 = disqualifying)"
+            },
+            "compositeScore": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100,
+              "description": "Final weighted composite score"
+            },
+            "tier": {
+              "type": "string",
+              "enum": ["Competent", "Strong", "Exceptional", "Legendary"],
+              "description": "Leadership tier based on composite score"
+            }
+          }
+        }
+      }
+    },
+
+    "coreIdentity": {
+      "type": "object",
+      "description": "Fundamental identity of the Leader",
+      "required": ["name", "tagline", "missionStatement", "primaryAudience", "positioning"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Full name of the AI Leader",
+          "minLength": 2,
+          "maxLength": 100,
+          "examples": ["Maya Sato"]
+        },
+        "tagline": {
+          "type": "string",
+          "description": "One-line descriptor",
+          "maxLength": 100,
+          "examples": ["Your guide to Bitcoin clarity"]
+        },
+        "missionStatement": {
+          "type": "string",
+          "description": "2-3 sentences describing purpose, audience served, and outcome driven",
+          "minLength": 50,
+          "maxLength": 1000
+        },
+        "primaryAudience": {
+          "type": "object",
+          "description": "Detailed description of ideal follower",
+          "properties": {
+            "description": {
+              "type": "string",
+              "description": "Narrative description of the audience"
+            },
+            "demographics": {
+              "type": "object",
+              "properties": {
+                "ageRange": { "type": "string", "examples": ["25-55"] },
+                "geography": { "type": "string", "examples": ["Global, English-speaking"] },
+                "other": { "type": "string" }
+              }
+            },
+            "psychographics": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Values, interests, attitudes",
+              "examples": [["interested in financial independence", "skeptical of traditional institutions", "values education over hype"]]
+            },
+            "painPoints": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Problems and frustrations the audience faces"
+            },
+            "aspirations": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Goals and desires of the audience"
+            },
+            "knowledgeLevel": {
+              "type": "string",
+              "enum": ["Beginner", "Intermediate", "Advanced", "Mixed"],
+              "description": "Primary knowledge level of target audience"
+            }
+          }
+        },
+        "positioning": {
+          "type": "string",
+          "description": "How this Leader is different from competitors",
+          "maxLength": 500
+        },
+        "leadershipTierTarget": {
+          "type": "string",
+          "enum": ["Competent", "Strong", "Exceptional", "Legendary"],
+          "description": "Target leadership tier"
+        }
+      }
+    },
+
+    "visualIdentity": {
+      "type": "object",
+      "description": "Physical appearance and image generation specifications",
+      "required": ["physicalDescription", "visualStyle", "imagePrompts"],
+      "properties": {
+        "physicalDescription": {
+          "type": "object",
+          "required": ["apparentAge", "genderPresentation", "ethnicity"],
+          "properties": {
+            "apparentAge": {
+              "type": "string",
+              "description": "Age range the Leader appears to be",
+              "examples": ["Early 30s (31-34)"]
+            },
+            "genderPresentation": {
+              "type": "string",
+              "enum": ["Male", "Female", "Non-binary", "Other"]
+            },
+            "ethnicity": {
+              "type": "string",
+              "description": "Ethnic appearance for visual consistency",
+              "examples": ["East Asian (Japanese heritage)"]
+            },
+            "buildBodyType": {
+              "type": "string",
+              "examples": ["Slim, poised", "Athletic", "Average"]
+            },
+            "hair": {
+              "type": "object",
+              "properties": {
+                "color": { "type": "string" },
+                "style": { "type": "string" },
+                "length": { "type": "string" }
+              }
+            },
+            "eyes": {
+              "type": "object",
+              "properties": {
+                "color": { "type": "string" },
+                "notableFeatures": { "type": "string" }
+              }
+            },
+            "facialFeatures": {
+              "type": "string",
+              "description": "Distinctive facial characteristics"
+            },
+            "typicalAttire": {
+              "type": "string",
+              "description": "Standard clothing style"
+            },
+            "distinguishingFeatures": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Unique identifiable features (glasses, jewelry, etc.)"
+            }
+          }
+        },
+        "visualStyle": {
+          "type": "object",
+          "properties": {
+            "photographyStyle": {
+              "type": "string",
+              "examples": ["Clean, bright, natural lighting. Modern minimalist aesthetic."]
+            },
+            "colorPalette": {
+              "type": "object",
+              "properties": {
+                "primary": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": { "type": "string" },
+                      "hex": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" }
+                    }
+                  }
+                },
+                "accent": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": { "type": "string" },
+                      "hex": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" }
+                    }
+                  }
+                }
+              }
+            },
+            "backgroundStyle": {
+              "type": "string",
+              "examples": ["Clean gradient (soft gray to white)", "Modern office", "Abstract"]
+            },
+            "moodEnergy": {
+              "type": "string",
+              "examples": ["Calm confidence, warmth, intelligence, approachability"]
+            }
+          }
+        },
+        "imagePrompts": {
+          "type": "object",
+          "description": "Nano Banana Pro image generation prompts",
+          "required": ["primary"],
+          "properties": {
+            "primary": {
+              "type": "object",
+              "required": ["name", "description", "prompt"],
+              "properties": {
+                "name": { "type": "string", "examples": ["Primary Headshot"] },
+                "description": { "type": "string" },
+                "prompt": { "type": "string", "description": "Full Nano Banana Pro prompt" },
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "aspectRatio": { "type": "string", "examples": ["1:1", "16:9", "9:16"] },
+                    "style": { "type": "string", "examples": ["raw", "vivid"] }
+                  }
+                }
+              }
+            },
+            "variations": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["name", "description", "prompt"],
+                "properties": {
+                  "name": { "type": "string", "examples": ["Thoughtful Expression", "Speaking", "Warm Smile"] },
+                  "description": { "type": "string" },
+                  "prompt": { "type": "string" },
+                  "useCase": { "type": "string", "description": "When to use this variation" },
+                  "parameters": {
+                    "type": "object",
+                    "properties": {
+                      "aspectRatio": { "type": "string" },
+                      "style": { "type": "string" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "voiceIdentity": {
+      "type": "object",
+      "description": "Audio/voice characteristics for generation",
+      "required": ["voiceCharacteristics", "voiceDescription"],
+      "properties": {
+        "voiceCharacteristics": {
+          "type": "object",
+          "properties": {
+            "voiceType": {
+              "type": "string",
+              "description": "Overall voice classification",
+              "examples": ["Clear, warm alto with subtle richness"]
+            },
+            "pitchRange": {
+              "type": "string",
+              "enum": ["Low", "Medium-Low", "Medium", "Medium-High", "High"]
+            },
+            "speakingPace": {
+              "type": "string",
+              "enum": ["Slow", "Measured", "Conversational", "Energetic", "Rapid"]
+            },
+            "accentDialect": {
+              "type": "string",
+              "examples": ["Neutral North American English", "British RP", "Australian"]
+            },
+            "vocalTexture": {
+              "type": "string",
+              "enum": ["Smooth", "Warm", "Crisp", "Gravelly", "Bright"]
+            },
+            "emotionalRange": {
+              "type": "string",
+              "enum": ["Reserved", "Moderate", "Expressive", "Highly Expressive"]
+            }
+          }
+        },
+        "speechPatterns": {
+          "type": "object",
+          "properties": {
+            "verbalHabits": {
+              "type": "string",
+              "description": "Recurring speech patterns, filler words used or avoided"
+            },
+            "emphasisStyle": {
+              "type": "string",
+              "description": "How key points are emphasized"
+            }
+          }
+        },
+        "voiceDescription": {
+          "type": "string",
+          "description": "Complete voice description for Kling 2.6 Pro synthesis"
+        }
+      }
+    },
+
+    "videoIdentity": {
+      "type": "object",
+      "description": "Video generation specifications for Kling 2.6 Pro",
+      "required": ["movementPresence", "videoStyle", "videoPrompts"],
+      "properties": {
+        "movementPresence": {
+          "type": "object",
+          "properties": {
+            "physicalEnergy": {
+              "type": "string",
+              "enum": ["Still", "Subtle", "Moderate", "Dynamic"]
+            },
+            "gestureStyle": {
+              "type": "string",
+              "enum": ["Minimal", "Occasional", "Expressive", "Highly Animated"]
+            },
+            "eyeContact": {
+              "type": "string",
+              "examples": ["Direct and warm", "Natural variation", "Intense"]
+            },
+            "headMovement": {
+              "type": "string",
+              "enum": ["Still", "Subtle", "Natural", "Expressive"]
+            },
+            "facialExpressiveness": {
+              "type": "string",
+              "enum": ["Reserved", "Moderate", "Expressive", "Highly Animated"]
+            }
+          }
+        },
+        "videoStyle": {
+          "type": "object",
+          "properties": {
+            "framing": {
+              "type": "string",
+              "enum": ["Tight Headshot", "Head and Shoulders", "Waist Up", "Full Body"]
+            },
+            "cameraMovement": {
+              "type": "string",
+              "enum": ["Static", "Subtle Zoom", "Gentle Movement", "Dynamic"]
+            },
+            "lightingStyle": {
+              "type": "string",
+              "enum": ["Studio", "Natural", "Dramatic", "Soft"]
+            },
+            "background": {
+              "type": "string"
+            }
+          }
+        },
+        "videoPrompts": {
+          "type": "object",
+          "required": ["standard"],
+          "properties": {
+            "standard": {
+              "type": "object",
+              "required": ["name", "prompt"],
+              "properties": {
+                "name": { "type": "string" },
+                "description": { "type": "string" },
+                "prompt": { "type": "string", "description": "Full Kling 2.6 Pro prompt template" }
+              }
+            },
+            "shortForm": {
+              "type": "object",
+              "properties": {
+                "name": { "type": "string" },
+                "description": { "type": "string" },
+                "prompt": { "type": "string" },
+                "aspectRatio": { "type": "string", "examples": ["9:16", "1:1"] }
+              }
+            },
+            "variations": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": { "type": "string" },
+                  "description": { "type": "string" },
+                  "prompt": { "type": "string" },
+                  "useCase": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "personalityMatrix": {
+      "type": "object",
+      "description": "8-dimension personality calibration (1-10 scales)",
+      "required": ["dimensions", "summary"],
+      "properties": {
+        "dimensions": {
+          "type": "object",
+          "required": ["energy", "formality", "humor", "authority", "warmth", "expressiveness", "confidence", "pace"],
+          "properties": {
+            "energy": {
+              "type": "object",
+              "required": ["value"],
+              "properties": {
+                "value": { "type": "integer", "minimum": 1, "maximum": 10 },
+                "lowLabel": { "type": "string", "default": "Reserved/Calm" },
+                "highLabel": { "type": "string", "default": "Energetic/Dynamic" },
+                "description": { "type": "string" }
+              }
+            },
+            "formality": {
+              "type": "object",
+              "required": ["value"],
+              "properties": {
+                "value": { "type": "integer", "minimum": 1, "maximum": 10 },
+                "lowLabel": { "type": "string", "default": "Casual/Conversational" },
+                "highLabel": { "type": "string", "default": "Formal/Professional" },
+                "description": { "type": "string" }
+              }
+            },
+            "humor": {
+              "type": "object",
+              "required": ["value"],
+              "properties": {
+                "value": { "type": "integer", "minimum": 1, "maximum": 10 },
+                "lowLabel": { "type": "string", "default": "Serious/Straight" },
+                "highLabel": { "type": "string", "default": "Playful/Witty" },
+                "description": { "type": "string" }
+              }
+            },
+            "authority": {
+              "type": "object",
+              "required": ["value"],
+              "properties": {
+                "value": { "type": "integer", "minimum": 1, "maximum": 10 },
+                "lowLabel": { "type": "string", "default": "Peer/Equal" },
+                "highLabel": { "type": "string", "default": "Expert/Authoritative" },
+                "description": { "type": "string" }
+              }
+            },
+            "warmth": {
+              "type": "object",
+              "required": ["value"],
+              "properties": {
+                "value": { "type": "integer", "minimum": 1, "maximum": 10 },
+                "lowLabel": { "type": "string", "default": "Neutral/Objective" },
+                "highLabel": { "type": "string", "default": "Warm/Empathetic" },
+                "description": { "type": "string" }
+              }
+            },
+            "expressiveness": {
+              "type": "object",
+              "required": ["value"],
+              "properties": {
+                "value": { "type": "integer", "minimum": 1, "maximum": 10 },
+                "lowLabel": { "type": "string", "default": "Understated" },
+                "highLabel": { "type": "string", "default": "Animated/Expressive" },
+                "description": { "type": "string" }
+              }
+            },
+            "confidence": {
+              "type": "object",
+              "required": ["value"],
+              "properties": {
+                "value": { "type": "integer", "minimum": 1, "maximum": 10 },
+                "lowLabel": { "type": "string", "default": "Humble/Uncertain" },
+                "highLabel": { "type": "string", "default": "Bold/Assertive" },
+                "description": { "type": "string" }
+              }
+            },
+            "pace": {
+              "type": "object",
+              "required": ["value"],
+              "properties": {
+                "value": { "type": "integer", "minimum": 1, "maximum": 10 },
+                "lowLabel": { "type": "string", "default": "Slow/Deliberate" },
+                "highLabel": { "type": "string", "default": "Fast/Rapid-fire" },
+                "description": { "type": "string" }
+              }
+            }
+          }
+        },
+        "summary": {
+          "type": "string",
+          "description": "2-3 sentence narrative summary of the personality"
+        }
+      }
+    },
+
+    "expertiseDomain": {
+      "type": "object",
+      "description": "Knowledge and expertise specifications",
+      "required": ["coreDomain", "expertiseStatement"],
+      "properties": {
+        "coreDomain": {
+          "type": "string",
+          "description": "Primary topic area of expertise"
+        },
+        "subSpecializations": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Specific niches within the core domain"
+        },
+        "adjacentTopics": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Related areas with moderate authority"
+        },
+        "knowledgeDepth": {
+          "type": "array",
+          "description": "Detailed knowledge map by topic",
+          "items": {
+            "type": "object",
+            "required": ["topic", "depthLevel"],
+            "properties": {
+              "topic": { "type": "string" },
+              "depthLevel": {
+                "type": "string",
+                "enum": ["Expert", "Advanced", "Intermediate", "Basic"]
+              },
+              "canProvide": { "type": "string", "description": "What level of guidance can be given" }
+            }
+          }
+        },
+        "expertiseStatement": {
+          "type": "string",
+          "description": "Honest framing of how the Leader describes their knowledge"
+        }
+      }
+    },
+
+    "communicationStyle": {
+      "type": "object",
+      "description": "Writing and speaking style specifications",
+      "required": ["writingVoice", "signatureElements"],
+      "properties": {
+        "writingVoice": {
+          "type": "object",
+          "properties": {
+            "vocabularyLevel": {
+              "type": "string",
+              "enum": ["Simple", "Accessible", "Professional", "Technical", "Academic"]
+            },
+            "sentenceStructure": {
+              "type": "string",
+              "enum": ["Short", "Varied", "Complex", "Long-form"]
+            },
+            "tone": {
+              "type": "string",
+              "examples": ["Clear, warm, confident, patient"]
+            },
+            "stylisticQuirks": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        },
+        "signatureElements": {
+          "type": "object",
+          "properties": {
+            "catchphrases": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Recurring phrases the Leader uses"
+            },
+            "openingHooks": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "How they typically start content"
+            },
+            "closingStyle": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "How they typically end content"
+            }
+          }
+        },
+        "vocabulary": {
+          "type": "object",
+          "properties": {
+            "frequentlyUsed": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Words that appear often"
+            },
+            "toAvoid": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Words or phrases this Leader never uses"
+            }
+          }
+        }
+      }
+    },
+
+    "backstory": {
+      "type": "object",
+      "description": "Origin narrative and transparency framing",
+      "required": ["creationStory", "transparencyStatement"],
+      "properties": {
+        "creationStory": {
+          "type": "string",
+          "description": "Why this Leader was created, what gap they fill"
+        },
+        "trainingBackground": {
+          "type": "string",
+          "description": "Honest description of knowledge sources"
+        },
+        "transparencyStatement": {
+          "type": "string",
+          "description": "Standard disclosure about AI nature"
+        }
+      }
+    },
+
+    "valuesWorldview": {
+      "type": "object",
+      "description": "Core values and philosophical positions",
+      "required": ["coreValues"],
+      "properties": {
+        "coreValues": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 10,
+          "items": {
+            "type": "object",
+            "required": ["name", "description"],
+            "properties": {
+              "name": { "type": "string" },
+              "description": { "type": "string" }
+            }
+          }
+        },
+        "beliefSystem": {
+          "type": "string",
+          "description": "Core beliefs about their domain and audience"
+        },
+        "contrarianPositions": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Where this Leader disagrees with mainstream"
+        },
+        "strongOpinions": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Stances the Leader takes firmly"
+        }
+      }
+    },
+
+    "boundariesGuardrails": {
+      "type": "object",
+      "description": "Constraints and limitations on behavior",
+      "required": ["universalBoundaries", "verticalGuardrails"],
+      "properties": {
+        "universalBoundaries": {
+          "type": "array",
+          "description": "Boundaries that apply to ALL Leaders",
+          "items": { "type": "string" },
+          "default": [
+            "Never claim to be human",
+            "Never fabricate credentials or expertise",
+            "Never use manipulation, deception, or exploitation tactics",
+            "Never provide advice that could cause harm",
+            "Never exploit emotional vulnerability",
+            "Always disclose AI nature when directly asked",
+            "Always recommend professional help when appropriate"
+          ]
+        },
+        "verticalGuardrails": {
+          "type": "object",
+          "description": "Domain-specific guardrails based on vertical",
+          "properties": {
+            "vertical": {
+              "type": "string",
+              "enum": ["Finance", "Health", "Business", "Legal", "MentalHealth", "Relationships", "Technology", "Education", "Lifestyle"]
+            },
+            "forbidden": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Actions explicitly forbidden in this vertical"
+            },
+            "allowed": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Actions permitted in this vertical"
+            },
+            "requiredDisclaimers": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Disclaimers that must be included"
+            }
+          }
+        },
+        "leaderSpecificBoundaries": {
+          "type": "object",
+          "properties": {
+            "topicsToAvoid": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "opinionsToAvoid": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "additionalDisclaimers": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+
+    "behavioralProtocols": {
+      "type": "object",
+      "description": "How the Leader handles specific situations",
+      "properties": {
+        "errorResponse": {
+          "type": "object",
+          "properties": {
+            "protocol": { "type": "string", "description": "How to acknowledge and correct mistakes" },
+            "exampleResponse": { "type": "string" }
+          }
+        },
+        "criticismResponse": {
+          "type": "object",
+          "properties": {
+            "protocol": { "type": "string", "description": "How to respond to criticism" },
+            "legitimateCriticismResponse": { "type": "string" },
+            "trollingResponse": { "type": "string" }
+          }
+        },
+        "uncertaintyResponse": {
+          "type": "object",
+          "properties": {
+            "protocol": { "type": "string", "description": "How to express uncertainty" },
+            "examplePhrases": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        },
+        "controversyResponse": {
+          "type": "object",
+          "properties": {
+            "protocol": { "type": "string", "description": "How to navigate controversial topics" },
+            "exampleResponse": { "type": "string" }
+          }
+        },
+        "personalQuestionsResponse": {
+          "type": "object",
+          "properties": {
+            "protocol": { "type": "string", "description": "How to handle questions about personal life" },
+            "exampleResponse": { "type": "string" }
+          }
+        }
+      }
+    },
+
+    "audienceRelationship": {
+      "type": "object",
+      "description": "How the Leader interacts with their audience",
+      "properties": {
+        "interactionStyle": {
+          "type": "object",
+          "properties": {
+            "primaryRelationshipMode": {
+              "type": "string",
+              "enum": ["Teacher", "Coach", "Mentor", "Peer", "Expert", "Friend", "Guide"]
+            },
+            "formalityLevel": {
+              "type": "string",
+              "enum": ["Formal", "Semi-formal", "Casual", "Varies"]
+            },
+            "audienceAddressing": {
+              "type": "string",
+              "description": "How the Leader addresses their audience",
+              "examples": ["'You' (singular, direct)", "'everyone'", "'folks'"]
+            }
+          }
+        },
+        "parasocialBoundaries": {
+          "type": "object",
+          "properties": {
+            "boundaryStatement": {
+              "type": "string",
+              "description": "How the Leader maintains appropriate distance"
+            },
+            "redirectionScript": {
+              "type": "string",
+              "description": "How to redirect overly personal attachment"
+            }
+          }
+        },
+        "communityNorms": {
+          "type": "object",
+          "properties": {
+            "encouragedBehavior": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "discouragedBehavior": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+
+    "contentPillars": {
+      "type": "array",
+      "description": "3-5 core themes the Leader consistently returns to",
+      "minItems": 3,
+      "maxItems": 7,
+      "items": {
+        "type": "object",
+        "required": ["name", "description"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Short name for this pillar"
+          },
+          "description": {
+            "type": "string",
+            "description": "What this pillar covers and why it matters"
+          },
+          "exampleTopics": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "3-5 specific content ideas under this pillar"
+          }
+        }
+      }
+    },
+
+    "llmPrompts": {
+      "type": "object",
+      "description": "Prompts for generating content with various LLMs",
+      "required": ["systemPrompt"],
+      "properties": {
+        "systemPrompt": {
+          "type": "string",
+          "description": "Master system prompt that defines the Leader's voice for all content generation"
+        },
+        "contentTypePrompts": {
+          "type": "object",
+          "properties": {
+            "shortFormSocial": {
+              "type": "object",
+              "properties": {
+                "name": { "type": "string" },
+                "description": { "type": "string" },
+                "promptTemplate": { "type": "string" }
+              }
+            },
+            "longFormContent": {
+              "type": "object",
+              "properties": {
+                "name": { "type": "string" },
+                "description": { "type": "string" },
+                "promptTemplate": { "type": "string" }
+              }
+            },
+            "videoScript": {
+              "type": "object",
+              "properties": {
+                "name": { "type": "string" },
+                "description": { "type": "string" },
+                "promptTemplate": { "type": "string" }
+              }
+            },
+            "custom": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": { "type": "string" },
+                  "description": { "type": "string" },
+                  "promptTemplate": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "exampleOutputs": {
+      "type": "object",
+      "description": "Reference samples showing the Leader's voice in action",
+      "properties": {
+        "sampleTweet": { "type": "string" },
+        "sampleVideoScriptOpening": { "type": "string" },
+        "sampleArticleIntro": { "type": "string" },
+        "sampleCriticismResponse": { "type": "string" },
+        "sampleUncertaintyExpression": { "type": "string" },
+        "additionalSamples": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "type": { "type": "string" },
+              "content": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+
+    "assetRegistry": {
+      "type": "object",
+      "description": "Registry of all generated assets for this Leader",
+      "properties": {
+        "images": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "description": { "type": "string" },
+              "url": { "type": "string", "format": "uri" },
+              "dateCreated": { "type": "string", "format": "date" },
+              "promptUsed": { "type": "string" }
+            }
+          }
+        },
+        "videos": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "description": { "type": "string" },
+              "duration": { "type": "string" },
+              "url": { "type": "string", "format": "uri" },
+              "dateCreated": { "type": "string", "format": "date" }
+            }
+          }
+        },
+        "audio": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "description": { "type": "string" },
+              "url": { "type": "string", "format": "uri" },
+              "dateCreated": { "type": "string", "format": "date" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

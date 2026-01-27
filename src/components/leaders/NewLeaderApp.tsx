@@ -137,7 +137,8 @@ function extractIdentity(parsed: unknown) {
   const character = typeof scores?.character === "number" ? scores.character : undefined;
   const competence = typeof scores?.competence === "number" ? scores.competence : undefined;
   const impact = typeof scores?.impact === "number" ? scores.impact : undefined;
-  const compositeScore = calculateCompositeScore(character, competence, impact);
+  const jobsRuleMultiplier = typeof scores?.jobsRuleMultiplier === "number" ? scores.jobsRuleMultiplier : 1.0;
+  const compositeScore = calculateCompositeScore(character, competence, impact, jobsRuleMultiplier);
   
   return {
     name: (core?.name as string) || "Untitled Leader",

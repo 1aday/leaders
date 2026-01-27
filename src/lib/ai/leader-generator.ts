@@ -77,6 +77,7 @@ function extractFamousPersonName(name: string, description: string): { detectedN
 export type GenerateLeaderBibleInput = {
   name?: string;
   description?: string;
+  onProgress?: (data: { tokens: number; estimatedTotal: number; percentage: number }) => void;
 };
 
 export type GenerateLeaderBibleResult = {
@@ -192,9 +193,21 @@ export const LEADER_BIBLE_V1_SCHEMA: AnyRecord = {
             impact: { type: "integer", description: "Impact pillar score (0-100)" },
             jobsRuleMultiplier: { type: "number", description: "Jobs Rule modifier (0-1)" },
             compositeScore: { type: "integer", description: "Final weighted composite score (0-100)" },
-            tier: { type: "string", enum: ["Competent", "Strong", "Exceptional", "Legendary"], description: "Leadership tier" }
+            tier: { type: "string", enum: ["Competent", "Strong", "Exceptional", "Legendary"], description: "Leadership tier" },
+            scoringReasoning: {
+              type: "object",
+              additionalProperties: false,
+              description: "Detailed breakdown and reasoning for each score",
+              properties: {
+                character: { type: "string", description: "Why this Character score? (2-3 sentences citing specific examples of integrity, beneficence, vulnerability, accountability, consistency)" },
+                competence: { type: "string", description: "Why this Competence score? (2-3 sentences citing specific examples of vision, expertise, communication, courage)" },
+                impact: { type: "string", description: "Why this Impact score? (2-3 sentences citing specific examples of value creation, trustworthiness, results)" },
+                jobsRule: { type: "string", description: "Why this Jobs Rule multiplier? (2-3 sentences explaining ethical considerations, any flaws or controversies that affected the multiplier)" }
+              },
+              required: ["character", "competence", "impact", "jobsRule"]
+            }
           },
-          required: ["character", "competence", "impact", "jobsRuleMultiplier", "compositeScore", "tier"]
+          required: ["character", "competence", "impact", "jobsRuleMultiplier", "compositeScore", "tier", "scoringReasoning"]
         }
       },
       required: ["leaderId", "bibleVersion", "createdDate", "lastModified", "vertical", "subDomains", "status", "approvedBy", "leadershipScores"]
@@ -1079,6 +1092,24 @@ Tier Thresholds (based on final composite score):
 - Exceptional: 80-89
 - Legendary: 90+
 
+CRITICAL: Scoring Reasoning Required
+You MUST include detailed scoringReasoning for ALL scores. For each dimension (Character, Competence, Impact, Jobs Rule):
+- Provide 2-3 sentences of specific reasoning
+- Cite concrete examples or traits that justify the score
+- Be specific and evidence-based, not vague
+- For Character: mention specific integrity examples, acts of beneficence, vulnerability shown, accountability demonstrated
+- For Competence: mention specific vision clarity, expertise depth, communication style, courageous decisions
+- For Impact: mention specific value created, trustworthiness demonstrated, measurable results
+- For Jobs Rule: explain any ethical concerns, controversies, or why score is 1.0 (clean)
+
+Example scoringReasoning:
+{
+  "character": "Score of 92 reflects exceptional integrity shown through consistent transparency about AI nature and refusal to make unsubstantiated claims. Demonstrates beneficence by prioritizing user education over sales tactics. Shows accountability through explicit correction protocols.",
+  "competence": "Score of 95 reflects deep expertise in Bitcoin fundamentals and security, combined with exceptional ability to translate complex concepts into accessible language. Vision is clear: demystify Bitcoin without hype.",
+  "impact": "Score of 90 reflects significant value creation through practical education that reduces user anxiety and builds genuine understanding. High trustworthiness through evidence-based approach and careful fact-checking.",
+  "jobsRule": "Multiplier of 0.95 reflects minor imperfection: while approach is ethical, could improve by being more explicit about limitations of advice in different regulatory jurisdictions."
+}
+
 IMPORTANT RULES:
 - All personality dimension values must be integers 1-10
 - Leadership scores: character, competence, impact (0-100), jobsRuleMultiplier (0-1), compositeScore (0-100)
@@ -1104,7 +1135,7 @@ Description: ${description || "(not specified - design based on the name or crea
 Requirements:
 - CRITICAL: If a Name is provided above, coreIdentity.name MUST EXACTLY match it verbatim (no renaming, no substitution).
 - If no Name but a person is mentioned in Description, extract that name and use it as coreIdentity.name.
-- Use the name as the basis for metadata.leaderId (format NAME-VERTICAL-001).
+- Use the name as the basis for metadata.leaderId (format: UPPERCASE-NAME-VERTICAL-001, NO SPACES, all hyphens).
 - Do NOT sanitize or rename controversial historical figures - use their actual names.
 
 CRITICAL - Famous Person Detection:
@@ -1117,7 +1148,8 @@ CRITICAL - Famous Person Detection:
   * In visualIdentity.imagePrompts, describe full physical attributes (gender, ethnicity, age, hair, eyes, etc.)
 
 Other Requirements:
-- Generate a unique leaderId in format NAME-VERTICAL-001
+- Generate a unique leaderId in format: UPPERCASE-NAME-VERTICAL-001 (e.g., "MAYA-SATO-BTC-001", "VLADIMIR-PUTIN-OTHER-001")
+  CRITICAL: leaderId must be ALL UPPERCASE, NO SPACES, separated by hyphens only
 - Pick an appropriate vertical from: Finance, Health, Business, Technology, Education, Lifestyle, Legal, MentalHealth, Relationships, Other
 - Create 4-6 relevant subDomains
 - Set realistic leadershipScores that match the tier
@@ -1149,6 +1181,10 @@ Return the complete JSON matching the schema.`;
     },
     body: JSON.stringify({
       model,
+      stream: true,
+      stream_options: {
+        include_usage: true,
+      },
       response_format: {
         type: "json_schema",
         json_schema: {
@@ -1169,26 +1205,89 @@ Return the complete JSON matching the schema.`;
     throw new Error(`OpenAI error (${res.status}): ${text || res.statusText}`);
   }
 
-  const data = (await res.json()) as unknown;
-  const message =
-    isPlainObject(data) &&
-    Array.isArray(data.choices) &&
-    isPlainObject(data.choices[0]) &&
-    isPlainObject((data.choices[0] as AnyRecord).message)
-      ? ((data.choices[0] as AnyRecord).message as AnyRecord)
-      : null;
-
-  if (!message) throw new Error("OpenAI response missing message");
-  if (typeof message.refusal === "string" && message.refusal.trim()) {
-    throw new Error(message.refusal.trim());
+  // Parse streaming response
+  if (!res.body) {
+    throw new Error("Response body is null");
   }
 
-  const content = typeof message.content === "string" ? message.content : null;
-  if (!content) throw new Error("OpenAI response missing message content");
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let fullContent = "";
+
+  // Estimate: A full Leader Bible is typically 8000-10000 tokens
+  const ESTIMATED_TOTAL_TOKENS = 9000;
+  let currentTokenCount = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        if (!line.trim() || line.trim() === "data: [DONE]") continue;
+        if (!line.startsWith("data: ")) continue;
+
+        try {
+          const json = JSON.parse(line.slice(6));
+
+          // Check for refusal
+          const refusal = json.choices?.[0]?.delta?.refusal || json.choices?.[0]?.message?.refusal;
+          if (typeof refusal === "string" && refusal.trim()) {
+            throw new Error(refusal.trim());
+          }
+
+          // Accumulate content
+          const delta = json.choices?.[0]?.delta?.content;
+          if (typeof delta === "string") {
+            fullContent += delta;
+
+            // Rough token estimation: ~4 chars per token
+            const deltaTokens = Math.ceil(delta.length / 4);
+            currentTokenCount += deltaTokens;
+
+            // Report progress (cap at 99% until done)
+            if (input.onProgress) {
+              const percentage = Math.min(99, Math.round((currentTokenCount / ESTIMATED_TOTAL_TOKENS) * 100));
+              input.onProgress({
+                tokens: currentTokenCount,
+                estimatedTotal: ESTIMATED_TOTAL_TOKENS,
+                percentage,
+              });
+            }
+          }
+        } catch (e) {
+          if (e instanceof Error && e.message.includes("refusal")) {
+            throw e;
+          }
+          // Skip other malformed lines
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  // Final progress update: 100%
+  if (input.onProgress) {
+    input.onProgress({
+      tokens: currentTokenCount,
+      estimatedTotal: ESTIMATED_TOTAL_TOKENS,
+      percentage: 100,
+    });
+  }
+
+  if (!fullContent) {
+    throw new Error("OpenAI response missing content");
+  }
 
   let leader: unknown;
   try {
-    leader = JSON.parse(content);
+    leader = JSON.parse(fullContent);
   } catch {
     throw new Error("OpenAI returned non-JSON content");
   }

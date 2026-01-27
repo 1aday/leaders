@@ -522,7 +522,7 @@ export function LeadersGalleryApp() {
   const handleDeleteLeader = React.useCallback(async (leaderId: string) => {
     const l = leaders.find((x) => x.id === leaderId);
     const name = l?.name ?? leaderId;
-    
+
     const confirmed = await confirm({
       title: `Delete ${name}?`,
       description: "This will permanently remove this leader from your gallery. This action cannot be undone.",
@@ -530,7 +530,7 @@ export function LeadersGalleryApp() {
       cancelText: "Keep",
       variant: "danger",
     });
-    
+
     if (!confirmed) return;
 
     // Mark as deleted FIRST to prevent re-sync/re-seed from adding it back
@@ -550,6 +550,43 @@ export function LeadersGalleryApp() {
     const next = loadLeaders().filter((x) => x.id !== leaderId);
     saveLeaders(next);
     setLeaders(next);
+  }, [leaders, confirm]);
+
+  const handleClearAll = React.useCallback(async () => {
+    const confirmed = await confirm({
+      title: "Delete All Leaders?",
+      description: `This will permanently remove all ${leaders.length} leaders from your gallery. This action cannot be undone.`,
+      confirmText: "Delete All",
+      cancelText: "Cancel",
+      variant: "danger",
+    });
+
+    if (!confirmed) return;
+
+    // Mark all as deleted to prevent re-sync/re-seed
+    leaders.forEach((l) => {
+      markDeleted(l.id);
+      const leaderKey = extractLeaderKeyFromRawJson(l.rawJson) ?? l.id;
+      if (leaderKey !== l.id) {
+        markDeleted(leaderKey);
+      }
+    });
+
+    // Best-effort: delete from Supabase (if configured)
+    try {
+      await Promise.allSettled(
+        leaders.map((l) => {
+          const leaderKey = extractLeaderKeyFromRawJson(l.rawJson) ?? l.id;
+          return fetch(`/api/leader/${encodeURIComponent(leaderKey)}`, { method: "DELETE" });
+        })
+      );
+    } catch {
+      // ignore
+    }
+
+    // Clear localStorage
+    saveLeaders([]);
+    setLeaders([]);
   }, [leaders, confirm]);
 
   const enhanced = React.useMemo((): LeaderDerived[] => {
@@ -673,6 +710,17 @@ export function LeadersGalleryApp() {
                     Create Leader
                   </Link>
                 </Button>
+
+                {leaders.length > 0 && (
+                  <Button
+                    onClick={handleClearAll}
+                    variant="ghost"
+                    className="group h-12 gap-2.5 rounded-xl px-6 text-base font-semibold text-white/80 hover:text-white hover:bg-white/10 transition-all"
+                  >
+                    <Trash2 className="h-5 w-5 transition-transform duration-300 group-hover:scale-110" />
+                    Clear All
+                  </Button>
+                )}
                 
                 {leadersWithValidAvatars.length > 0 && (
                   <div className="flex -space-x-3">

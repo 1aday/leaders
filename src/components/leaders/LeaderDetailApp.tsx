@@ -575,6 +575,9 @@ export function LeaderDetailApp({ id }: { id: string }) {
   const [showChatInstructions, setShowChatInstructions] = React.useState(false);
   const [loadingChatInstructions, setLoadingChatInstructions] = React.useState(false);
 
+  // Show/hide scoring reasoning breakdown
+  const [showScoringReasoning, setShowScoringReasoning] = React.useState(false);
+
   // Chat scroll state - auto-scroll to bottom on new messages
   const chatScrollRef = React.useRef<HTMLDivElement>(null);
 
@@ -1194,7 +1197,8 @@ export function LeaderDetailApp({ id }: { id: string }) {
     ? calculateCompositeScore(
         scores.character as number | undefined,
         scores.competence as number | undefined,
-        scores.impact as number | undefined
+        scores.impact as number | undefined,
+        typeof scores.jobsRuleMultiplier === "number" ? scores.jobsRuleMultiplier : 1.0
       )
     : undefined;
 
@@ -1368,32 +1372,104 @@ export function LeaderDetailApp({ id }: { id: string }) {
 
             {/* Scores */}
             {scores && (
-              <div className="grid grid-cols-4 gap-3 py-4 border-y border-border/40">
-                {typeof scores.character === "number" && (
-                  <div className="text-center">
-                    <div className="text-2xl font-semibold tabular-nums">{scores.character}</div>
-                    <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Char</div>
+              <>
+                <div className="grid grid-cols-4 gap-3 py-4 border-y border-border/40">
+                  {typeof scores.character === "number" && (
+                    <div className="text-center">
+                      <div className="text-2xl font-semibold tabular-nums">{scores.character}</div>
+                      <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Char</div>
+                    </div>
+                  )}
+                  {typeof scores.competence === "number" && (
+                    <div className="text-center">
+                      <div className="text-2xl font-semibold tabular-nums">{scores.competence}</div>
+                      <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Comp</div>
+                    </div>
+                  )}
+                  {typeof scores.impact === "number" && (
+                    <div className="text-center">
+                      <div className="text-2xl font-semibold tabular-nums">{scores.impact}</div>
+                      <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Impact</div>
+                    </div>
+                  )}
+                  {typeof calculatedComposite === "number" && (
+                    <div className="text-center">
+                      <div className="text-2xl font-semibold tabular-nums text-primary">{calculatedComposite}</div>
+                      <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Total</div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Scoring Reasoning - collapsible */}
+                {scores.scoringReasoning && typeof scores.scoringReasoning === "object" && (
+                  <div className="rounded-xl border border-border/40 overflow-hidden">
+                    <button
+                      type="button"
+                      className="flex w-full items-center justify-between px-4 py-3 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors"
+                      onClick={() => setShowScoringReasoning(!showScoringReasoning)}
+                    >
+                      <span className="font-medium">Scoring Breakdown</span>
+                      {showScoringReasoning ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                    </button>
+                    {showScoringReasoning && (
+                      <div className="border-t border-border/40 px-4 py-4 bg-muted/10 space-y-4">
+                        {typeof (scores.scoringReasoning as any).character === "string" && (
+                          <div>
+                            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5 font-semibold">
+                              Character ({typeof scores.character === "number" ? scores.character : "?"}) • 39% weight
+                            </div>
+                            <p className="text-[11px] leading-relaxed text-foreground/80">
+                              {(scores.scoringReasoning as any).character}
+                            </p>
+                          </div>
+                        )}
+                        {typeof (scores.scoringReasoning as any).competence === "string" && (
+                          <div>
+                            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5 font-semibold">
+                              Competence ({typeof scores.competence === "number" ? scores.competence : "?"}) • 30% weight
+                            </div>
+                            <p className="text-[11px] leading-relaxed text-foreground/80">
+                              {(scores.scoringReasoning as any).competence}
+                            </p>
+                          </div>
+                        )}
+                        {typeof (scores.scoringReasoning as any).impact === "string" && (
+                          <div>
+                            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5 font-semibold">
+                              Impact ({typeof scores.impact === "number" ? scores.impact : "?"}) • 31% weight
+                            </div>
+                            <p className="text-[11px] leading-relaxed text-foreground/80">
+                              {(scores.scoringReasoning as any).impact}
+                            </p>
+                          </div>
+                        )}
+                        {typeof (scores.scoringReasoning as any).jobsRule === "string" && (
+                          <div>
+                            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5 font-semibold">
+                              Jobs Rule (×{typeof scores.jobsRuleMultiplier === "number" ? scores.jobsRuleMultiplier.toFixed(2) : "1.00"})
+                            </div>
+                            <p className="text-[11px] leading-relaxed text-foreground/80">
+                              {(scores.scoringReasoning as any).jobsRule}
+                            </p>
+                          </div>
+                        )}
+                        {typeof scores.character === "number" && typeof scores.competence === "number" && typeof scores.impact === "number" && (
+                          <div className="pt-3 border-t border-border/20">
+                            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5 font-semibold">
+                              Final Calculation
+                            </div>
+                            <p className="text-[11px] leading-relaxed text-foreground/80 font-mono">
+                              Achievement = ({scores.character} × 0.39) + ({scores.competence} × 0.30) + ({scores.impact} × 0.31) = {Math.round((scores.character * 0.39) + (scores.competence * 0.30) + (scores.impact * 0.31))}
+                              <br />
+                              Final = {Math.round((scores.character * 0.39) + (scores.competence * 0.30) + (scores.impact * 0.31))} × {typeof scores.jobsRuleMultiplier === "number" ? scores.jobsRuleMultiplier.toFixed(2) : "1.00"} = {calculatedComposite}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
-                {typeof scores.competence === "number" && (
-                  <div className="text-center">
-                    <div className="text-2xl font-semibold tabular-nums">{scores.competence}</div>
-                    <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Comp</div>
-                  </div>
-                )}
-                {typeof scores.impact === "number" && (
-                  <div className="text-center">
-                    <div className="text-2xl font-semibold tabular-nums">{scores.impact}</div>
-                    <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Impact</div>
-                  </div>
-                )}
-                {typeof calculatedComposite === "number" && (
-                  <div className="text-center">
-                    <div className="text-2xl font-semibold tabular-nums text-primary">{calculatedComposite}</div>
-                    <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Total</div>
-                  </div>
-                )}
-              </div>
+              </>
             )}
 
             {/* Actions */}

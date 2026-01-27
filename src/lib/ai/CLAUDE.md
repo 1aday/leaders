@@ -7,6 +7,7 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
+| #3517 | 6:01 PM | 🔵 | Leader Bible Schema Structure and Generation System | ~661 |
 | #3450 | 5:32 PM | ⚖️ | Designed plan for culturally-aware name generation and expertise field display in profilemaker | ~608 |
 | #3438 | 5:19 PM | ✅ | Updated leader-generator.ts default model to gpt-5-nano-2025-08-07 | ~299 |
 | #3435 | 5:18 PM | 🔵 | Leader chat system creates immersive AI personas from comprehensive profile data | ~526 |

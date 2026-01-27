@@ -56,7 +56,15 @@ export function deriveLeaderSummary(parsed: unknown, rawJson: string): Omit<Lead
   const assets = root && isPlainObject(root.assetRegistry) ? (root.assetRegistry as Record<string, unknown>) : null;
   const images = assets && Array.isArray(assets.images) ? assets.images : [];
   
-  const id = getString(metadata, "leaderId") ?? (typeof crypto !== "undefined" ? crypto.randomUUID() : String(Date.now()));
+  // Get leaderId, normalize if needed (replace spaces with hyphens, uppercase)
+  let id = getString(metadata, "leaderId");
+  if (id) {
+    // Normalize: replace spaces with hyphens, convert to uppercase for consistency
+    id = id.replace(/\s+/g, "-").toUpperCase();
+  } else {
+    // Fallback to UUID if no leaderId present
+    id = typeof crypto !== "undefined" ? crypto.randomUUID() : String(Date.now());
+  }
   const name = getString(core, "name") ?? "Untitled leader";
   const tagline = getString(core, "tagline");
   const vertical = getString(metadata, "vertical");
@@ -338,14 +346,26 @@ export function upsertLeader(summary: Omit<LeaderSummary, "createdAt" | "updated
 export function getLeaderById(id: string): LeaderSummary | null {
   // First try to load directly from storage
   const current = loadLeaders();
-  const found = current.find((l) => l.id === id);
+
+  // Try exact match first
+  let found = current.find((l) => l.id === id);
   if (found) return found;
-  
+
+  // Try normalized match (for backward compatibility with bad IDs)
+  const normalizedId = id.replace(/\s+/g, "-").toUpperCase();
+  found = current.find((l) => l.id === normalizedId);
+  if (found) return found;
+
+  // Try case-insensitive match as last resort
+  const lowerSearchId = id.toLowerCase();
+  found = current.find((l) => l.id.toLowerCase() === lowerSearchId);
+  if (found) return found;
+
   // If not found and storage is empty, seed sample leaders
   if (current.length === 0) {
     const seeded = seedLeadersIfEmpty();
-    return seeded.find((l) => l.id === id) ?? null;
+    return seeded.find((l) => l.id === id || l.id === normalizedId || l.id.toLowerCase() === lowerSearchId) ?? null;
   }
-  
+
   return null;
 }
