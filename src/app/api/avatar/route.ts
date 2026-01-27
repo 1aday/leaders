@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { generateAvatarPromptWithOpenAI, generateAvatarWithReplicate } from "@/lib/ai/leader-avatar";
 import { insertLeaderAsset, upsertLeaderFromJson } from "@/lib/db/leader-persist";
+import { uploadReplicateBlobToSupabase, generateImageStoragePath } from "@/lib/storage/replicate-blob";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,14 +41,43 @@ export async function POST(req: Request) {
       outputFormat: body.outputFormat ?? "png",
     });
 
-    // Best-effort persistence (awaited so it works reliably in serverless).
+    // Best-effort persistence: Download blob from Replicate and upload to permanent Supabase Storage
+    let finalImageUrl = img.imageUrl; // Default to Replicate URL as fallback
     try {
       const { leaderId } = await upsertLeaderFromJson({ leaderJson, profilePicUrl: img.imageUrl });
       if (leaderId) {
+        // Download from Replicate and upload to Supabase Storage for permanent storage
+        console.log(`[Avatar] Uploading image blob to Supabase Storage for leader ${leaderId}`);
+        const extension = (body.outputFormat ?? "png").toLowerCase();
+        const storagePath = generateImageStoragePath({
+          leaderId,
+          predictionId: img.predictionId,
+          extension,
+        });
+
+        const { publicUrl, error } = await uploadReplicateBlobToSupabase({
+          replicateUrl: img.imageUrl,
+          bucket: "leader-assets",
+          filePath: storagePath,
+          contentType: extension === "png" ? "image/png" : "image/jpeg",
+        });
+
+        if (error) {
+          console.warn(`[Avatar] Failed to upload image blob, using Replicate URL as fallback:`, error);
+          // Use Replicate URL if Supabase upload fails
+          finalImageUrl = img.imageUrl;
+        } else {
+          console.log(`[Avatar] Image uploaded successfully: ${publicUrl}`);
+          // Update with permanent Supabase Storage URL
+          finalImageUrl = publicUrl;
+          await upsertLeaderFromJson({ leaderJson, profilePicUrl: publicUrl });
+        }
+
+        // Save asset record with permanent URL
         await insertLeaderAsset({
           leaderId,
           assetType: "avatar",
-          url: img.imageUrl,
+          url: finalImageUrl,
           provider: "replicate",
           providerPredictionId: img.predictionId,
           prompt: promptResult.prompt,
@@ -58,6 +88,8 @@ export async function POST(req: Request) {
             usedFallbackModel: img.usedFallback ?? false,
             aspectRatio: body.aspectRatio ?? "1:1",
             outputFormat: body.outputFormat ?? "png",
+            replicateUrl: img.imageUrl,
+            supabaseUrl: finalImageUrl !== img.imageUrl ? finalImageUrl : undefined,
           },
         });
       }
@@ -66,7 +98,7 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({
-      profilePicUrl: img.imageUrl,
+      profilePicUrl: finalImageUrl, // Return permanent Supabase URL instead of temporary Replicate URL
       replicatePredictionId: img.predictionId,
       styleId: promptResult.styleId,
       prompt: promptResult.prompt,
