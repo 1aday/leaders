@@ -54,8 +54,20 @@ function buildVariedPrompt(opts: {
 }): string {
   const parts: string[] = [];
 
-  // Core subject
-  parts.push("Professional photorealistic studio headshot");
+  // Vary the photography style for semantic diversity
+  const photographyStyles = [
+    "Professional photorealistic studio headshot",
+    "Corporate portrait photography",
+    "Editorial magazine style portrait",
+    "Contemporary professional headshot",
+    "High-end business portrait",
+    "Documentary style professional portrait",
+    "Modern lifestyle portrait photography",
+    "Executive portrait session"
+  ];
+
+  const style = photographyStyles[Math.floor(Math.random() * photographyStyles.length)];
+  parts.push(style);
 
   // Build gender term
   const genderTerm = opts.genderPresentation?.toLowerCase() === "male" ? "man"
@@ -93,12 +105,52 @@ function buildVariedPrompt(opts: {
   // Expression
   parts.push(opts.expression);
 
-  // Technical specs
+  // Vary framing and composition
+  const framingOptions = [
+    "head and shoulders framing, looking at camera",
+    "tight portrait framing, direct gaze",
+    "medium close-up with natural pose",
+    "professional portrait framing, engaging expression",
+    "classic headshot composition",
+    "contemporary portrait framing with slight angle",
+    "relaxed professional framing"
+  ];
+
+  const framing = framingOptions[Math.floor(Math.random() * framingOptions.length)];
+
+  // Vary lighting dramatically
+  const lightingOptions = [
+    "soft key light with subtle rim light",
+    "natural diffused lighting",
+    "dramatic side lighting with depth",
+    "bright even professional lighting",
+    "golden warm lighting with soft shadows",
+    "studio lighting with catchlights in eyes",
+    "soft window light with gentle shadows",
+    "professional three-point lighting setup"
+  ];
+
+  const lighting = lightingOptions[Math.floor(Math.random() * lightingOptions.length)];
+
+  // Vary background significantly
+  const backgroundOptions = [
+    "clean neutral gray gradient background",
+    "soft bokeh background in muted tones",
+    "minimalist solid color background",
+    "subtle textured backdrop",
+    "out-of-focus professional office setting",
+    "clean white background with soft shadows",
+    "warm beige gradient background",
+    "contemporary studio backdrop"
+  ];
+
+  const background = backgroundOptions[Math.floor(Math.random() * backgroundOptions.length)];
+
+  // Technical specs with variation
   parts.push("85mm portrait lens");
-  parts.push("soft key light with subtle rim light");
-  parts.push("clean neutral gray gradient background");
-  parts.push("head and shoulders framing");
-  parts.push("looking at camera");
+  parts.push(lighting);
+  parts.push(background);
+  parts.push(framing);
   parts.push("high detail");
   parts.push("natural skin texture");
   parts.push("photorealistic");
@@ -308,26 +360,93 @@ function buildVisualAttributesPrompt(opts: {
 }
 
 /**
- * Builds a descriptive prompt for famous people
+ * Builds a descriptive prompt for famous people with optional variation for regeneration
  */
-function buildFamousPersonPrompt(name: string, vertical?: string): string {
+function buildFamousPersonPrompt(name: string, vertical?: string, isRegeneration?: boolean): string {
   const parts: string[] = [];
-  
+
   parts.push(`Professional photorealistic studio headshot of ${name} as they would look in real life`);
   parts.push("authentic likeness");
-  parts.push("confident approachable expression");
-  parts.push("85mm portrait lens");
-  parts.push("soft key light with subtle rim light");
-  parts.push("clean neutral gray gradient background");
-  parts.push("head and shoulders framing");
-  parts.push("looking at camera");
-  parts.push("high detail");
-  parts.push("natural skin texture");
-  
-  if (vertical) {
-    parts.push(`professional ${vertical.toLowerCase()} leader aesthetic`);
+
+  // Add variation when regenerating
+  if (isRegeneration) {
+    // Vary expression/mood significantly
+    const expressions = [
+      "confident warm smile",
+      "serious thoughtful expression",
+      "friendly approachable demeanor",
+      "intense focused look",
+      "calm serene expression",
+      "animated mid-conversation",
+      "contemplative wise expression",
+      "energetic enthusiastic smile"
+    ];
+
+    // Vary lighting style
+    const lightingStyles = [
+      "soft diffused lighting with subtle shadows",
+      "dramatic side lighting with depth",
+      "bright even lighting",
+      "natural window light",
+      "soft key light with rim light accent",
+      "golden hour warm lighting",
+      "professional studio lighting with catchlights"
+    ];
+
+    // Vary framing and camera angle
+    const framingOptions = [
+      "tight head and shoulders framing, looking at camera",
+      "medium close-up framing, slight angle",
+      "traditional portrait framing, direct gaze",
+      "relaxed framing with natural pose",
+      "close portrait with engaged expression"
+    ];
+
+    // Vary background and context
+    const backgrounds = [
+      "clean neutral gray gradient background",
+      "subtle bokeh background",
+      "minimalist solid background",
+      "soft out-of-focus professional setting",
+      "clean white background with soft shadows"
+    ];
+
+    // Randomly select variations
+    const expression = expressions[Math.floor(Math.random() * expressions.length)];
+    const lighting = lightingStyles[Math.floor(Math.random() * lightingStyles.length)];
+    const framing = framingOptions[Math.floor(Math.random() * framingOptions.length)];
+    const background = backgrounds[Math.floor(Math.random() * backgrounds.length)];
+
+    parts.push(expression);
+    parts.push("85mm portrait lens");
+    parts.push(lighting);
+    parts.push(background);
+    parts.push(framing);
+    parts.push("high detail");
+    parts.push("natural skin texture");
+
+    if (vertical) {
+      parts.push(`professional ${vertical.toLowerCase()} leader aesthetic`);
+    }
+
+    // Add unique seed for AI model variation
+    parts.push(`variation seed ${Math.floor(Math.random() * 1000000)}`);
+  } else {
+    // Original non-regeneration prompt
+    parts.push("confident approachable expression");
+    parts.push("85mm portrait lens");
+    parts.push("soft key light with subtle rim light");
+    parts.push("clean neutral gray gradient background");
+    parts.push("head and shoulders framing");
+    parts.push("looking at camera");
+    parts.push("high detail");
+    parts.push("natural skin texture");
+
+    if (vertical) {
+      parts.push(`professional ${vertical.toLowerCase()} leader aesthetic`);
+    }
   }
-  
+
   return parts.join(", ");
 }
 
@@ -392,8 +511,8 @@ export async function generateAvatarPromptWithOpenAI(opts: {
   let prompt: string;
 
   if (isFamous && name) {
-    // For famous people, just use the name - Nano Banana knows them
-    prompt = buildFamousPersonPrompt(name, vertical);
+    // For famous people, use the name with optional variation on regeneration
+    prompt = buildFamousPersonPrompt(name, vertical, opts.isRegeneration);
   } else {
     // For fictional/non-famous leaders, build detailed prompt from visual attributes
     // Pass isRegeneration flag to add variety when regenerating

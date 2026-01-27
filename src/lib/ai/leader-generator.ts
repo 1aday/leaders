@@ -1218,12 +1218,15 @@ Return the complete JSON matching the schema.`;
   // Estimate: A full Leader Bible is typically 8000-10000 tokens
   const ESTIMATED_TOTAL_TOKENS = 9000;
   let currentTokenCount = 0;
+  let chunkCount = 0;
+  const startTime = Date.now();
 
   try {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
 
+      chunkCount++;
       buffer += decoder.decode(value, { stream: true });
       const lines = buffer.split("\n");
       buffer = lines.pop() || "";
@@ -1243,7 +1246,7 @@ Return the complete JSON matching the schema.`;
 
           // Accumulate content
           const delta = json.choices?.[0]?.delta?.content;
-          if (typeof delta === "string") {
+          if (typeof delta === "string" && delta.length > 0) {
             fullContent += delta;
 
             // Rough token estimation: ~4 chars per token
@@ -1267,6 +1270,29 @@ Return the complete JSON matching the schema.`;
           // Skip other malformed lines
         }
       }
+
+      // Fallback progress based on chunks and time (for json_schema mode)
+      // Send progress update every 5 chunks or every 2 seconds
+      if (input.onProgress && currentTokenCount === 0 && (chunkCount % 5 === 0 || Date.now() - startTime > 2000)) {
+        const elapsedSeconds = (Date.now() - startTime) / 1000;
+        // Assume ~30 second total generation time, cap at 95%
+        const timeBasedProgress = Math.min(95, Math.round((elapsedSeconds / 30) * 100));
+        const chunkBasedProgress = Math.min(95, Math.round((chunkCount / 100) * 100));
+        const percentage = Math.max(timeBasedProgress, chunkBasedProgress);
+
+        if (percentage > 0) {
+          input.onProgress({
+            tokens: 0,
+            estimatedTotal: ESTIMATED_TOTAL_TOKENS,
+            percentage,
+          });
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
     }
   } finally {
     reader.releaseLock();

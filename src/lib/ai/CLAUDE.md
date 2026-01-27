@@ -7,6 +7,8 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
+| #3683 | 8:06 PM | 🔴 | Progress Tracking Fallback for JSON Schema Mode | ~412 |
+| #3682 | 8:05 PM | 🟣 | Enhanced Progress Tracking Telemetry | ~302 |
 | #3517 | 6:01 PM | 🔵 | Leader Bible Schema Structure and Generation System | ~661 |
 | #3450 | 5:32 PM | ⚖️ | Designed plan for culturally-aware name generation and expertise field display in profilemaker | ~608 |
 | #3438 | 5:19 PM | ✅ | Updated leader-generator.ts default model to gpt-5-nano-2025-08-07 | ~299 |
