@@ -587,9 +587,11 @@ export function LeaderDetailApp({ id }: { id: string }) {
   // Auto-scroll only if user hasn't scrolled up
   React.useEffect(() => {
     if (chatScrollRef.current && !isUserScrolledUp) {
+      // Use instant scroll during streaming to avoid blocking user input
+      // Smooth scroll animations would override user's manual scrolling
       chatScrollRef.current.scrollTo({
         top: chatScrollRef.current.scrollHeight,
-        behavior: "smooth",
+        behavior: "auto",
       });
     }
   }, [chatMessages, isUserScrolledUp]);
