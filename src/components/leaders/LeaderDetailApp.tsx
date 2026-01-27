@@ -1666,44 +1666,63 @@ export function LeaderDetailApp({ id }: { id: string }) {
             {sections.length > 0 && (
               <section>
                 <Tabs defaultValue={sections[0]?.key} className="w-full">
-                  <div className="relative mb-5">
-                    {/* Left scroll button */}
+                  <div className="relative mb-6">
+                    {/* Left gradient fade indicator */}
+                    <div
+                      className={cn(
+                        "absolute left-0 top-0 bottom-0 w-12 bg-gradient-to-r from-background via-background/80 to-transparent z-10 pointer-events-none transition-opacity duration-300",
+                        canScrollLeft ? "opacity-100" : "opacity-0"
+                      )}
+                      aria-hidden="true"
+                    />
+
+                    {/* Right gradient fade indicator */}
+                    <div
+                      className={cn(
+                        "absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-background via-background/80 to-transparent z-10 pointer-events-none transition-opacity duration-300",
+                        canScrollRight ? "opacity-100" : "opacity-0"
+                      )}
+                      aria-hidden="true"
+                    />
+
+                    {/* Left scroll button - subtle, appears on hover */}
                     <button
                       type="button"
                       onClick={() => scrollTabs("left")}
                       className={cn(
-                        "absolute left-0 top-1/2 -translate-y-1/2 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-background/80 backdrop-blur-sm border border-border/50 shadow-sm text-muted-foreground hover:text-foreground hover:bg-background transition-all",
-                        canScrollLeft ? "opacity-100" : "opacity-0 pointer-events-none"
+                        "absolute left-2 top-1/2 -translate-y-1/2 z-20 flex h-7 w-7 items-center justify-center rounded-full bg-card/95 backdrop-blur border border-border/60 shadow-sm text-muted-foreground hover:text-primary hover:border-primary/30 hover:shadow-md transition-all duration-200",
+                        canScrollLeft ? "opacity-0 hover:opacity-100" : "opacity-0 pointer-events-none"
                       )}
                       aria-label="Scroll tabs left"
                     >
-                      <ChevronLeft className="h-4 w-4" />
+                      <ChevronLeft className="h-3.5 w-3.5" />
                     </button>
 
-                    {/* Right scroll button */}
+                    {/* Right scroll button - subtle, appears on hover */}
                     <button
                       type="button"
                       onClick={() => scrollTabs("right")}
                       className={cn(
-                        "absolute right-0 top-1/2 -translate-y-1/2 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-background/80 backdrop-blur-sm border border-border/50 shadow-sm text-muted-foreground hover:text-foreground hover:bg-background transition-all",
-                        canScrollRight ? "opacity-100" : "opacity-0 pointer-events-none"
+                        "absolute right-2 top-1/2 -translate-y-1/2 z-20 flex h-7 w-7 items-center justify-center rounded-full bg-card/95 backdrop-blur border border-border/60 shadow-sm text-muted-foreground hover:text-primary hover:border-primary/30 hover:shadow-md transition-all duration-200",
+                        canScrollRight ? "opacity-0 hover:opacity-100" : "opacity-0 pointer-events-none"
                       )}
                       aria-label="Scroll tabs right"
                     >
-                      <ChevronRight className="h-4 w-4" />
+                      <ChevronRight className="h-3.5 w-3.5" />
                     </button>
 
-                    {/* Scrollable tabs container */}
+                    {/* Scrollable tabs container with smooth scroll */}
                     <div
                       ref={tabsScrollRef}
-                      className="overflow-x-auto scrollbar-none mx-4"
+                      className="overflow-x-auto scrollbar-none scroll-smooth"
+                      style={{ scrollBehavior: 'smooth' }}
                     >
-                      <TabsList className="inline-flex h-auto gap-1 bg-transparent p-0 justify-start">
+                      <TabsList className="inline-flex h-auto gap-2 bg-transparent p-1 justify-start min-w-full">
                         {sections.map((s) => (
                           <TabsTrigger
                             key={s.key}
                             value={s.key}
-                            className="shrink-0 rounded-full px-4 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 data-[state=active]:bg-foreground data-[state=active]:text-background transition-all"
+                            className="relative shrink-0 px-5 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-all duration-200 rounded-lg border border-transparent data-[state=active]:text-primary data-[state=active]:font-semibold after:absolute after:bottom-0 after:left-2 after:right-2 after:h-0.5 after:rounded-full after:bg-primary after:opacity-0 after:transition-opacity after:duration-200 data-[state=active]:after:opacity-100 hover:bg-accent/5"
                           >
                             {s.title}
                           </TabsTrigger>
@@ -1713,8 +1732,12 @@ export function LeaderDetailApp({ id }: { id: string }) {
                   </div>
 
                   {sections.map((s) => (
-                    <TabsContent key={s.key} value={s.key} className="mt-0 text-left">
-                      <div className="rounded-2xl bg-muted/10 p-8 text-left">
+                    <TabsContent
+                      key={s.key}
+                      value={s.key}
+                      className="mt-0 text-left animate-in fade-in-0 slide-in-from-bottom-2 duration-300"
+                    >
+                      <div className="rounded-2xl bg-muted/10 p-8 text-left border border-border/20">
                         <RenderValue value={s.value} />
                       </div>
                     </TabsContent>
