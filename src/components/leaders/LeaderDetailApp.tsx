@@ -1722,7 +1722,7 @@ export function LeaderDetailApp({ id }: { id: string }) {
                           <TabsTrigger
                             key={s.key}
                             value={s.key}
-                            className="relative shrink-0 px-5 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-all duration-200 rounded-lg border border-transparent data-[state=active]:text-primary data-[state=active]:font-semibold after:absolute after:bottom-0 after:left-2 after:right-2 after:h-0.5 after:rounded-full after:bg-primary after:opacity-0 after:transition-opacity after:duration-200 data-[state=active]:after:opacity-100 hover:bg-accent/5"
+                            className="relative shrink-0 px-5 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-all duration-200 rounded-lg border border-transparent data-[state=active]:text-[oklch(0.55_0.16_45)] data-[state=active]:font-semibold after:absolute after:bottom-0 after:left-2 after:right-2 after:h-0.5 after:rounded-full after:bg-[oklch(0.55_0.16_45)] after:opacity-0 after:transition-opacity after:duration-200 data-[state=active]:after:opacity-100 hover:bg-accent/5"
                           >
                             {s.title}
                           </TabsTrigger>
