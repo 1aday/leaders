@@ -1450,6 +1450,38 @@ Return the complete JSON matching the schema.`;
         }
       }
     }
+
+    // CRITICAL: Enforce Jesus Christ baseline scores (100/100/100)
+    // The AI should score Jesus as 100, but we enforce it here for reliability
+    const leaderName = (typeof core?.name === "string" ? core.name : "").toLowerCase();
+    const isJesus = leaderName.includes("jesus") ||
+                    (leaderName.includes("christ") && !leaderName.includes("christo"));
+
+    if (isJesus && isPlainObject((leader as AnyRecord).metadata)) {
+      const metadata = (leader as AnyRecord).metadata as AnyRecord;
+      if (isPlainObject(metadata.leadershipScores)) {
+        const scores = metadata.leadershipScores as AnyRecord;
+
+        // Force perfect baseline scores
+        scores.character = 100;
+        scores.competence = 100;
+        scores.impact = 100;
+        scores.jobsRuleMultiplier = 1.0;
+        scores.compositeScore = 100;
+        scores.tier = "Legendary";
+
+        // Update reasoning to explain the perfect baseline
+        if (isPlainObject(scores.scoringReasoning)) {
+          const reasoning = scores.scoringReasoning as AnyRecord;
+          reasoning.character = "Perfect 100: Absolute integrity (never deceived), perfect beneficence (taught love and sacrifice), perfect vulnerability (wept openly, showed human emotion), perfect accountability (accepted consequences), perfect consistency (teachings aligned with actions). This is the baseline standard all other leaders are measured against.";
+          reasoning.competence = "Perfect 100: Perfect vision (Kingdom of God philosophy enduring 2000+ years), perfect wisdom (parables remain relevant across all cultures), perfect communication (reached all levels of society effectively), perfect courage (faced death rather than compromise principles). This is the baseline standard for competence.";
+          reasoning.impact = "Perfect 100: Ultimate impact - 2.4 billion followers today, 2000+ years of influence, transformed Western civilization, inspired billions toward compassion and justice. No other leader in history has comparable lasting impact. This is the baseline standard for impact.";
+          reasoning.jobsRule = "Perfect 1.0: Exemplary ethical conduct in all areas. Taught ethical living and demonstrated principles through actions. This is the baseline standard for ethical leadership.";
+        }
+
+        console.log("[Leader Gen] Enforced Jesus Christ baseline scores: 100/100/100");
+      }
+    }
   }
 
   console.timeEnd("[Leader Gen] Total");
