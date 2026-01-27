@@ -228,20 +228,23 @@ function VideoPlayer({
         loop
       />
       
-      {/* Play/Pause button - subtle, only on hover */}
+      {/* Play/Pause button - always visible on mobile, hover on desktop */}
       <div className={cn(
         "absolute inset-0 flex items-center justify-center transition-all duration-200",
-        isPlaying 
-          ? "bg-transparent opacity-0 group-hover:opacity-100" 
-          : "bg-black/10 opacity-0 group-hover:opacity-100 group-hover:bg-black/20",
+        // Mobile: always show when not playing
+        "md:opacity-0 md:group-hover:opacity-100",
+        // Desktop: show on hover
+        isPlaying
+          ? "bg-transparent opacity-0 md:group-hover:opacity-100"
+          : "bg-black/10 md:opacity-0 md:group-hover:opacity-100 md:group-hover:bg-black/20",
       )}>
         <button
           type="button"
           onClick={togglePlay}
           className={cn(
             "flex items-center justify-center rounded-full transition-all duration-200",
-            isPlaying 
-              ? "h-10 w-10 bg-black/40 text-white/90 hover:bg-black/60" 
+            isPlaying
+              ? "h-10 w-10 bg-black/40 text-white/90 hover:bg-black/60"
               : "h-12 w-12 bg-white/80 text-foreground/80 shadow-md hover:bg-white hover:text-foreground hover:scale-105",
           )}
         >
