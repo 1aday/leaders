@@ -1206,8 +1206,8 @@ export function LeaderDetailApp({ id }: { id: string }) {
   return (
     <>
       {ConfirmDialog}
-    <div className="min-h-screen bg-background">
-      <div className="mx-auto max-w-7xl px-6 py-8">
+    <div className="min-h-screen bg-background overflow-x-hidden">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 py-8">
         {/* Back nav */}
         <nav className="mb-8">
           <Button asChild variant="ghost" size="sm" className="gap-2 text-muted-foreground hover:text-foreground -ml-3">
