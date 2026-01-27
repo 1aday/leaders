@@ -1407,7 +1407,7 @@ export function LeaderDetailApp({ id }: { id: string }) {
             </div>
 
             {/* Scores */}
-            {scores && (
+            {scores ? (
               <>
                 <div className="grid grid-cols-4 gap-3 py-4 border-y border-border/40">
                   {typeof scores.character === "number" && (
@@ -1511,6 +1511,24 @@ export function LeaderDetailApp({ id }: { id: string }) {
                   </div>
                 )}
               </>
+            ) : (
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+                <div className="flex items-start gap-3">
+                  <div className="rounded-lg bg-amber-500/10 p-2">
+                    <svg className="h-5 w-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <div className="font-semibold text-sm text-amber-600 dark:text-amber-400 mb-1">
+                      No Leadership Scores
+                    </div>
+                    <div className="text-xs text-foreground/70 leading-relaxed">
+                      This leader was generated before the Jesus Christ baseline scoring system was implemented. Delete and regenerate this leader to get proper Character, Competence, Impact, and Jobs Rule scores (100/100/100 baseline).
+                    </div>
+                  </div>
+                </div>
+              </div>
             )}
 
             {/* Actions */}
