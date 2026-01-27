@@ -1378,33 +1378,18 @@ export function LeaderDetailApp({ id }: { id: string }) {
                     <div className="text-center">
                       <div className="text-2xl font-semibold tabular-nums">{scores.character}</div>
                       <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Char</div>
-                      {typeof scores.jobsRuleMultiplier === "number" && scores.jobsRuleMultiplier < 1.0 && (
-                        <div className="text-[9px] text-muted-foreground/60 mt-0.5">
-                          ×{scores.jobsRuleMultiplier.toFixed(2)}
-                        </div>
-                      )}
                     </div>
                   )}
                   {typeof scores.competence === "number" && (
                     <div className="text-center">
                       <div className="text-2xl font-semibold tabular-nums">{scores.competence}</div>
                       <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Comp</div>
-                      {typeof scores.jobsRuleMultiplier === "number" && scores.jobsRuleMultiplier < 1.0 && (
-                        <div className="text-[9px] text-muted-foreground/60 mt-0.5">
-                          ×{scores.jobsRuleMultiplier.toFixed(2)}
-                        </div>
-                      )}
                     </div>
                   )}
                   {typeof scores.impact === "number" && (
                     <div className="text-center">
                       <div className="text-2xl font-semibold tabular-nums">{scores.impact}</div>
                       <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Impact</div>
-                      {typeof scores.jobsRuleMultiplier === "number" && scores.jobsRuleMultiplier < 1.0 && (
-                        <div className="text-[9px] text-muted-foreground/60 mt-0.5">
-                          ×{scores.jobsRuleMultiplier.toFixed(2)}
-                        </div>
-                      )}
                     </div>
                   )}
                   {typeof calculatedComposite === "number" && (
