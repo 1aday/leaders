@@ -1002,6 +1002,28 @@ export async function generateLeaderBibleWithOpenAI(input: GenerateLeaderBibleIn
   
   // If no input provided, generate a random aligned leader
   const isRandom = !name && !description;
+
+  // Ethnicity rotation list - cycle through ALL before repeating
+  const ethnicityRotation = [
+    "Japanese", "Nigerian", "Mexican", "Brazilian", "Chinese", "Korean", "Indian",
+    "Vietnamese", "Thai", "Indonesian", "Filipino", "Pakistani", "Bangladeshi",
+    "Egyptian", "Turkish", "Iranian", "Iraqi", "Lebanese", "Moroccan", "Algerian",
+    "Ethiopian", "Kenyan", "South African", "Ghanaian", "Ugandan",
+    "British", "French", "German", "Italian", "Spanish", "Dutch", "Swedish",
+    "Norwegian", "Danish", "Finnish", "Polish", "Russian", "Ukrainian",
+    "American (diverse)", "Canadian (diverse)", "Australian (diverse)",
+    "Peruvian", "Colombian", "Venezuelan", "Chilean", "Ecuadorian",
+    "Jamaican", "Cuban", "Puerto Rican", "Dominican",
+  ];
+
+  // Gender rotation - ensure balance
+  const genderRotation = ["Female", "Male", "Female", "Male", "Female", "Male", "Non-binary"];
+
+  // Select ethnicity and gender using deterministic rotation (prevents clustering)
+  const timestampSeed = now.getTime();
+  const selectedEthnicity = ethnicityRotation[timestampSeed % ethnicityRotation.length];
+  const selectedGender = genderRotation[timestampSeed % genderRotation.length];
+
   if (isRandom) {
     const archetype = getRandomLeaderArchetype();
     name = archetype.name;
@@ -1255,7 +1277,14 @@ Return only the JSON object.`;
 
 Name: ${name || "(not specified - extract from description if a person is mentioned, otherwise create a character)"}
 Description: ${description || "(not specified - design based on the name or create an interesting archetype)"}
-
+${isRandom ? `
+REQUIRED DEMOGRAPHICS FOR THIS GENERATION:
+- Ethnicity: ${selectedEthnicity}
+- Gender Presentation: ${selectedGender}
+- You MUST use these exact demographics in visualIdentity.physicalDescription
+- Generate a culturally appropriate name for this ethnicity and gender
+- DO NOT use different demographics - these are REQUIRED for this specific generation
+` : ""}
 Requirements:
 - CRITICAL: If a Name is provided above, coreIdentity.name MUST EXACTLY match it verbatim (no renaming, no substitution).
 - If no Name but a person is mentioned in Description, extract that name and use it as coreIdentity.name.
@@ -1289,20 +1318,12 @@ Other Requirements:
 - Provide sample outputs showing the Leader's voice
 
 Cultural Name Matching & Demographic Diversity:
+- If "REQUIRED DEMOGRAPHICS" are specified above, you MUST use those EXACT demographics - no substitutions
 - CRITICAL: The name MUST be culturally appropriate for the ethnicity and gender specified
-- When generating visualIdentity.physicalDescription, choose a specific ethnicity RANDOMLY - don't associate domains with demographics
-- DEMOGRAPHIC RANDOMIZATION RULES:
-  * Finance leaders can be ANY ethnicity and gender (not just male, not just Western)
-  * Technology leaders can be ANY ethnicity and gender (not just male, not just Asian)
-  * Health/wellness leaders can be ANY ethnicity and gender (not just female)
-  * ALL domains should have maximum demographic diversity
-  * Use randomization key ${Date.now() % 10000} to vary your demographic choices
-  * Aim for balanced representation: ~50% women, ~50% men, ~5% non-binary across all generations
-  * Rotate through different ethnicities: East Asian, South Asian, African, Latin American, Middle Eastern, European, Southeast Asian, etc.
-- Then generate a name in coreIdentity.name that matches that ethnicity and genderPresentation
-- Use common given names and surnames from that culture
+- Generate a name in coreIdentity.name that matches that ethnicity and genderPresentation
+- Use common given names and surnames from that culture (but NOT the example names from earlier - generate unique names)
 - For famous people (basedOnFamousPerson = true), skip cultural logic and use their actual name
-- NEVER associate domain/vertical with specific demographic patterns
+- NEVER associate domain/vertical with specific demographic patterns - any domain can have any demographics
 
 Return the complete JSON matching the schema.`;
 
