@@ -21,6 +21,10 @@ export async function POST(req: Request) {
     const writer = writable.getWriter();
     const encoder = new TextEncoder();
 
+    // Send immediate start signal
+    const startSignal = `data: ${JSON.stringify({ type: "progress", tokens: 0, estimatedTotal: 9000, percentage: 1 })}\n\n`;
+    writer.write(encoder.encode(startSignal));
+
     // Start generation in background
     (async () => {
       try {

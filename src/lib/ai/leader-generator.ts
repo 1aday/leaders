@@ -967,6 +967,9 @@ export const LEADER_BIBLE_V1_SCHEMA: AnyRecord = {
 };
 
 export async function generateLeaderBibleWithOpenAI(input: GenerateLeaderBibleInput): Promise<GenerateLeaderBibleResult> {
+  console.time("[Leader Gen] Total");
+  console.time("[Leader Gen] OpenAI fetch");
+
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
 
@@ -1200,6 +1203,8 @@ Return the complete JSON matching the schema.`;
     }),
   });
 
+  console.timeEnd("[Leader Gen] OpenAI fetch");
+
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`OpenAI error (${res.status}): ${text || res.statusText}`);
@@ -1408,5 +1413,6 @@ Return the complete JSON matching the schema.`;
     }
   }
 
+  console.timeEnd("[Leader Gen] Total");
   return { leader, model };
 }
