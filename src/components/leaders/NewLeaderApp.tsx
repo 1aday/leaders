@@ -20,7 +20,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn, calculateCompositeScore } from "@/lib/utils";
 import { safeJsonParse } from "@/lib/safe-json";
-import { deriveLeaderSummary, upsertLeader } from "@/lib/leader-store";
+import { deriveLeaderSummary, upsertLeader, loadLeaders, saveLeaders } from "@/lib/leader-store";
 import { SAMPLE_LEADER_BIBLES } from "@/lib/sample-leader-bibles";
 
 // Simple JSON syntax highlighter with pretty-printing
@@ -273,6 +273,57 @@ export function NewLeaderApp() {
     await new Promise((r) => setTimeout(r, 400));
     const summary = deriveLeaderSummary(parsed, raw);
     const saved = upsertLeader(summary);
+
+    // Auto-generate avatar after saving leader
+    try {
+      const avatarRes = await fetch("/api/avatar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          leaderRawJson: raw,
+          leaderId: saved.id,
+          aspectRatio: "1:1",
+          outputFormat: "png",
+        }),
+      });
+
+      if (avatarRes.ok) {
+        const avatarData = await avatarRes.json() as { profilePicUrl?: string };
+        if (avatarData.profilePicUrl) {
+          // Update the saved leader with the avatar URL
+          const urlWithCacheBust = avatarData.profilePicUrl + (avatarData.profilePicUrl.includes('?') ? '&' : '?') + `t=${Date.now()}`;
+          const current = loadLeaders();
+          const idx = current.findIndex((l) => l.id === saved.id);
+          if (idx >= 0) {
+            const next = [...current];
+
+            // Update raw JSON to include profilePicUrl in coreIdentity
+            try {
+              const leaderJson = JSON.parse(raw) as Record<string, unknown>;
+              if (!leaderJson.coreIdentity || typeof leaderJson.coreIdentity !== 'object') {
+                leaderJson.coreIdentity = {};
+              }
+              (leaderJson.coreIdentity as Record<string, unknown>).profilePicUrl = urlWithCacheBust;
+
+              const updatedRawJson = JSON.stringify(leaderJson, null, 2);
+              next[idx] = {
+                ...next[idx],
+                profilePicUrl: urlWithCacheBust,
+                updatedAt: new Date().toISOString(),
+                rawJson: updatedRawJson
+              };
+              saveLeaders(next);
+            } catch (e) {
+              console.warn('[Auto-Avatar] Failed to update leader with avatar URL:', e);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      // Avatar generation is best-effort, don't block navigation
+      console.warn('[Auto-Avatar] Failed to generate avatar:', e);
+    }
+
     router.push(`/leaders/${encodeURIComponent(saved.id)}`);
   }, [parsed, raw, router]);
 
