@@ -122,10 +122,12 @@ function ProfilePicLarge({
   src,
   name,
   isLoading = false,
+  hasVideo = false,
 }: {
   src?: string;
   name: string;
   isLoading?: boolean;
+  hasVideo?: boolean;
 }) {
   const [error, setError] = React.useState(false);
 
@@ -164,6 +166,13 @@ function ProfilePicLarge({
           <div className="flex flex-col items-center gap-3">
             <Sparkles className="h-8 w-8 animate-spin text-white" />
             <p className="text-sm font-medium text-white">Generating...</p>
+          </div>
+        </div>
+      )}
+      {hasVideo && !isLoading && (
+        <div className="absolute inset-0 flex items-center justify-center md:hidden pointer-events-none">
+          <div className="rounded-full bg-black/50 p-4 backdrop-blur-sm">
+            <Play className="h-8 w-8 text-white" fill="white" />
           </div>
         </div>
       )}
@@ -1096,6 +1105,9 @@ export function LeaderDetailApp({ id }: { id: string }) {
         if (status === "succeeded") {
           if (!outputUrl) throw new Error("Intro video succeeded but returned no outputUrl");
 
+          // Add cache-busting timestamp to URL for mobile browsers
+          const videoUrlWithCacheBust = outputUrl + (outputUrl.includes('?') ? '&' : '?') + `t=${Date.now()}`;
+
           // Update the leader's raw JSON to embed the welcomeVideoUrl in coreIdentity
           const now = new Date().toISOString();
           const current = loadLeaders();
@@ -1115,8 +1127,8 @@ export function LeaderDetailApp({ id }: { id: string }) {
                   leaderObj.coreIdentity = {};
                 }
 
-                // Update welcomeVideoUrl in coreIdentity
-                (leaderObj.coreIdentity as Record<string, unknown>).welcomeVideoUrl = outputUrl;
+                // Update welcomeVideoUrl in coreIdentity with cache-busting timestamp
+                (leaderObj.coreIdentity as Record<string, unknown>).welcomeVideoUrl = videoUrlWithCacheBust;
 
                 // Also update lastModified if metadata exists
                 if (leaderObj.metadata && typeof leaderObj.metadata === 'object') {
@@ -1131,7 +1143,7 @@ export function LeaderDetailApp({ id }: { id: string }) {
 
             next[idx] = {
               ...next[idx],
-              welcomeVideoUrl: outputUrl,
+              welcomeVideoUrl: videoUrlWithCacheBust,
               updatedAt: now,
               rawJson: updatedRawJson
             };
@@ -1144,7 +1156,7 @@ export function LeaderDetailApp({ id }: { id: string }) {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                   leaderRawJson: updatedRawJson,
-                  welcomeVideoUrl: outputUrl,
+                  welcomeVideoUrl: videoUrlWithCacheBust,
                 }),
               });
             } catch (e) {
@@ -1213,6 +1225,7 @@ export function LeaderDetailApp({ id }: { id: string }) {
                 src={profilePicUrl}
                 name={leader.name}
                 isLoading={generatingAvatar || generatingIntroVideo}
+                hasVideo={false}
               />
             )}
             
@@ -1226,7 +1239,7 @@ export function LeaderDetailApp({ id }: { id: string }) {
                 disabled={generatingAvatar || loadingPromptPreview}
               >
                 <Sparkles className="h-4 w-4" />
-                {generatingAvatar ? "Generating…" : "Generate Avatar"}
+                {generatingAvatar ? "Generating…" : (profilePicUrl ? "Regenerate Avatar" : "Generate Avatar")}
               </Button>
               {profilePicUrl && (
                 <Button
@@ -1237,7 +1250,7 @@ export function LeaderDetailApp({ id }: { id: string }) {
                   disabled={generatingIntroVideo}
                 >
                   <Play className="h-4 w-4" />
-                  {generatingIntroVideo ? "Generating…" : "Video"}
+                  {generatingIntroVideo ? "Generating…" : (welcomeVideoUrl ? "Regenerate Video" : "Generate Video")}
                 </Button>
               )}
               <Button

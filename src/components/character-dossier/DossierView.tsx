@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { cn, calculateCompositeScore } from "@/lib/utils";
+import { cn, calculateCompositeScore, calculateAchievementScore } from "@/lib/utils";
 
 type Props = {
   value: unknown;
@@ -224,7 +224,9 @@ function Hero({ value }: { value: Record<string, unknown> }) {
   const character = typeof scores?.character === "number" ? scores.character : undefined;
   const competence = typeof scores?.competence === "number" ? scores.competence : undefined;
   const impact = typeof scores?.impact === "number" ? scores.impact : undefined;
-  const composite = calculateCompositeScore(character, competence, impact) ?? null;
+  const jobsMultiplier = typeof scores?.jobsRuleMultiplier === "number" ? scores.jobsRuleMultiplier : 1.0;
+  const achievement = calculateAchievementScore(character, competence, impact) ?? null;
+  const composite = calculateCompositeScore(character, competence, impact, jobsMultiplier) ?? null;
 
   return (
     <Card className="relative overflow-hidden">
@@ -265,14 +267,31 @@ function Hero({ value }: { value: Record<string, unknown> }) {
             </div>
           </div>
           {typeof composite === "number" ? (
-            <div className="w-28">
-              <div className="text-right text-xs font-medium text-muted-foreground">
-                Composite
+            <div className="min-w-32">
+              <div className="space-y-2">
+                {typeof achievement === "number" && jobsMultiplier < 1.0 ? (
+                  <>
+                    <div className="flex items-center justify-between gap-3 text-xs">
+                      <span className="text-muted-foreground">Achievement</span>
+                      <span className="font-semibold tabular-nums">{achievement}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-3 text-xs">
+                      <span className="text-muted-foreground">Jobs Rule</span>
+                      <span className="font-semibold tabular-nums">×{jobsMultiplier.toFixed(2)}</span>
+                    </div>
+                    <Separator />
+                  </>
+                ) : null}
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-xs font-medium text-muted-foreground">
+                    {jobsMultiplier < 1.0 ? "Final" : "Composite"}
+                  </span>
+                  <span className="text-2xl font-semibold tabular-nums">
+                    {composite}
+                  </span>
+                </div>
+                <Progress value={composite} className="h-2" />
               </div>
-              <div className="mt-1 text-right text-2xl font-semibold tabular-nums">
-                {composite}
-              </div>
-              <Progress value={composite} className="mt-2 h-2" />
             </div>
           ) : null}
         </div>

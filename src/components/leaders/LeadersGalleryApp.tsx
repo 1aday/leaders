@@ -6,6 +6,7 @@ import Image from "next/image";
 import {
   Film,
   Hash,
+  Play,
   Plus,
   Sparkles,
   Star,
@@ -213,12 +214,19 @@ function HeroMedia({
           )}
         />
         
-        {/* Subtle video indicator */}
+        {/* Subtle video indicator - desktop only */}
         {!isHovered && (
-          <div className="absolute bottom-2 right-2 rounded-full bg-black/40 p-1.5 backdrop-blur-sm">
+          <div className="absolute bottom-2 right-2 rounded-full bg-black/40 p-1.5 backdrop-blur-sm hidden md:block">
             <Film className="h-3 w-3 text-white/80" />
           </div>
         )}
+
+        {/* Mobile play button overlay - always visible on touch devices */}
+        <div className="absolute inset-0 flex items-center justify-center md:hidden pointer-events-none">
+          <div className="rounded-full bg-black/50 p-3 backdrop-blur-sm">
+            <Play className="h-6 w-6 text-white" fill="white" />
+          </div>
+        </div>
       </div>
     );
   }
@@ -318,6 +326,13 @@ function LeaderCard({ leader, onDelete }: { leader: LeaderDerived; onDelete: (id
         <h3 className="font-display text-xl font-semibold tracking-tight text-foreground group-hover:text-primary transition-colors">
           {capitalizeName(leader.name)}
         </h3>
+
+        {/* Expertise subheading */}
+        {leader.expertise && (
+          <p className="mt-0.5 text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
+            {leader.expertise}
+          </p>
+        )}
 
         {/* Tagline */}
         {leader.tagline && (

@@ -1055,10 +1055,34 @@ SCHEMA SECTIONS TO COMPLETE:
 16. exampleOutputs - Sample tweet, video script, article intro, responses
 17. assetRegistry - Placeholder entries for images, videos, audio
 
+LEADERSHIP SCORING FORMULA (Leaders.ai v1.0):
+
+Achievement Score = (Character × 0.39) + (Competence × 0.30) + (Impact × 0.31)
+Final Composite Score = Achievement Score × Jobs Rule Multiplier
+
+Scoring Philosophy:
+- Character weighs most (39%): Integrity, beneficence, vulnerability, accountability, consistency
+- Impact weighs second (31%): Value creation, trustworthiness, results
+- Competence weighs third (30%): Vision, expertise, communication, courage
+- Jobs Rule applies ethical lens: "It matters how you do it, not just what you do"
+
+Jobs Rule Multiplier Guidelines (0-1.0):
+- 1.0 (Clean): Exemplary conduct, no significant ethical issues
+- 0.75 (Minor Flaws): Small missteps, but generally sound judgment
+- 0.5 (Notable Flaws): Significant ethical concerns that impact leadership credibility
+- 0.25 (Significant Flaws): Major ethical violations or character failures
+- 0.0 (Disqualifying): Fundamental character failures that render them unfit to lead
+
+Tier Thresholds (based on final composite score):
+- Competent: 50-64
+- Strong: 65-79
+- Exceptional: 80-89
+- Legendary: 90+
+
 IMPORTANT RULES:
 - All personality dimension values must be integers 1-10
 - Leadership scores: character, competence, impact (0-100), jobsRuleMultiplier (0-1), compositeScore (0-100)
-- Tiers: Competent (50-64), Strong (65-79), Exceptional (80-89), Legendary (90+)
+- compositeScore should match the formula above (you can calculate it or let the system compute it)
 - universalBoundaries must include: "Never claim to be human", "Never fabricate credentials", "Always disclose AI nature when asked"
 - metadata.status should be "Review" for generated profiles
 - createdDate: '${date}', lastModified: '${iso}'

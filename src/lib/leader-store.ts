@@ -68,7 +68,10 @@ export function deriveLeaderSummary(parsed: unknown, rawJson: string): Omit<Lead
   const character = getNumber(scores, "character");
   const competence = getNumber(scores, "competence");
   const impact = getNumber(scores, "impact");
-  const compositeScore = calculateCompositeScore(character, competence, impact);
+  const jobsMultiplier = typeof scores?.jobsRuleMultiplier === "number"
+    ? scores.jobsRuleMultiplier
+    : 1.0;
+  const compositeScore = calculateCompositeScore(character, competence, impact, jobsMultiplier);
   
   // Try to get profile pic URL from various places in the schema
   // Filter out placeholder URLs that aren't real assets
@@ -83,12 +86,58 @@ export function deriveLeaderSummary(parsed: unknown, rawJson: string): Omit<Lead
     ?? (images[0] && typeof images[0] === "object" && "url" in (images[0] as object) ? (images[0] as { url: string }).url : undefined);
   
   const profilePicUrl = isPlaceholderUrl(rawProfilePicUrl) ? undefined : rawProfilePicUrl;
-  
+
+  // Extract expertise domain and derive display label
+  const expertiseDomain = root && isPlainObject(root.expertiseDomain)
+    ? (root.expertiseDomain as Record<string, unknown>)
+    : null;
+  const coreDomain = getString(expertiseDomain, "coreDomain");
+  const expertise = coreDomain ? deriveExpertiseLabel(coreDomain) : undefined;
+
   // NOTE: We intentionally do NOT extract welcomeVideoUrl from the JSON schema here.
   // Video URLs should only be set when a video is actually generated via the API.
   // This prevents sample/placeholder video URLs from showing up as playable videos.
 
-  return { id, name, tagline, vertical, subDomains, tier, compositeScore, profilePicUrl, rawJson };
+  return { id, name, tagline, expertise, vertical, subDomains, tier, compositeScore, profilePicUrl, rawJson };
+}
+
+/**
+ * Convert expertiseDomain.coreDomain into a display-friendly expertise label
+ */
+function deriveExpertiseLabel(coreDomain: string): string {
+  // If already has role suffix, use as-is
+  const hasRole = /\b(expert|coach|guide|mentor|specialist|educator|advisor|consultant)\b/i.test(coreDomain);
+  if (hasRole) return coreDomain;
+
+  const lower = coreDomain.toLowerCase();
+
+  // Education domains -> "Educator"
+  if (lower.includes("education") || lower.includes("teaching")) {
+    return coreDomain.replace(/education/i, "Educator").replace(/teaching/i, "Educator");
+  }
+
+  // Finance domains -> "Expert"
+  if (lower.includes("finance") || lower.includes("investing") || lower.includes("wealth")) {
+    return `${coreDomain} Expert`;
+  }
+
+  // Health/Wellness -> "Coach"
+  if (lower.includes("fitness") || lower.includes("nutrition") || lower.includes("wellness")) {
+    return `${coreDomain} Coach`;
+  }
+
+  // Mindfulness/Mental Health -> "Guide"
+  if (lower.includes("mindfulness") || lower.includes("meditation") || lower.includes("mental")) {
+    return `${coreDomain} Guide`;
+  }
+
+  // Technical/Business -> "Expert"
+  if (lower.includes("technology") || lower.includes("business") || lower.includes("programming")) {
+    return `${coreDomain} Expert`;
+  }
+
+  // Default: append "Expert"
+  return `${coreDomain} Expert`;
 }
 
 export function loadLeaders(): LeaderSummary[] {
