@@ -552,11 +552,11 @@ export function LeadersGalleryApp() {
     setLeaders(next);
   }, [leaders, confirm]);
 
-  const handleClearDatabase = React.useCallback(async () => {
+  const handleClearEverything = React.useCallback(async () => {
     const confirmed = await confirm({
-      title: "Clear Database?",
-      description: "This will delete ALL leaders from the cloud database (Supabase), including any legacy leaders not visible in your gallery. This action cannot be undone.",
-      confirmText: "Clear Database",
+      title: "Nuclear Reset?",
+      description: "This will delete ALL leaders from both localStorage AND the cloud database, including any legacy leaders. This action cannot be undone and will give you a fresh start.",
+      confirmText: "Nuclear Reset",
       cancelText: "Cancel",
       variant: "danger",
     });
@@ -564,29 +564,46 @@ export function LeadersGalleryApp() {
     if (!confirmed) return;
 
     try {
+      // Clear cloud database
       const res = await fetch("/api/leaders/clear", { method: "DELETE" });
-      const data = await res.json() as { ok?: boolean; deleted?: number; error?: string };
+      const data = await res.json() as { ok?: boolean; deleted?: number; deletedKeys?: string[]; error?: string };
 
       if (!res.ok) {
         throw new Error(data.error ?? "Failed to clear database");
       }
 
-      // Clear localStorage
-      saveLeaders([]);
+      // Clear localStorage completely
+      if (typeof window !== "undefined") {
+        // Clear leaders
+        window.localStorage.removeItem("profilemaker.leaders.v1");
+        // Clear deleted IDs list
+        window.localStorage.removeItem("profilemaker.deletedLeaderIds.v1");
+        // Clear any chat history
+        Object.keys(window.localStorage).forEach(key => {
+          if (key.startsWith("profilemaker.chat.")) {
+            window.localStorage.removeItem(key);
+          }
+        });
+      }
+
       setLeaders([]);
 
       await confirm({
-        title: "Database Cleared",
-        description: `Successfully deleted ${data.deleted ?? 0} leaders from the database. Your gallery has been reset.`,
-        confirmText: "OK",
-        cancelText: "",
+        title: "Reset Complete",
+        description: `Deleted ${data.deleted ?? 0} leaders from database. LocalStorage cleared. Refresh the page to start fresh with sample leaders.`,
+        confirmText: "Refresh Now",
+        cancelText: "Later",
         variant: "info",
+      }).then((shouldRefresh) => {
+        if (shouldRefresh) {
+          window.location.reload();
+        }
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Unknown error";
       await confirm({
         title: "Error",
-        description: `Failed to clear database: ${msg}`,
+        description: `Failed to clear: ${msg}`,
         confirmText: "OK",
         cancelText: "",
         variant: "danger",
@@ -778,12 +795,12 @@ export function LeadersGalleryApp() {
                       Clear All
                     </Button>
                     <Button
-                      onClick={handleClearDatabase}
+                      onClick={handleClearEverything}
                       variant="ghost"
                       className="group h-12 gap-2.5 rounded-xl px-6 text-base font-semibold text-red-400/80 hover:text-red-400 hover:bg-red-400/10 transition-all"
                     >
                       <Trash2 className="h-5 w-5 transition-transform duration-300 group-hover:scale-110" />
-                      Clear Database
+                      Nuclear Reset
                     </Button>
                   </>
                 )}

@@ -14,22 +14,32 @@ export async function DELETE() {
   try {
     const supabase = getSupabaseAdmin();
 
+    // First, get all leader_keys for logging
+    const { data: allLeaders } = await supabase
+      .from("leaders")
+      .select("leader_key, name")
+      .order("created_at", { ascending: false });
+
     // Delete all leaders (FK cascades will delete related assets + chat logs)
     // Use gt with a timestamp to match all rows (created_at is always present)
     const { data, error } = await supabase
       .from("leaders")
       .delete()
       .gt("created_at", "1970-01-01")
-      .select("id");
+      .select("id, leader_key");
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
     const deletedCount = Array.isArray(data) ? data.length : 0;
+    const deletedKeys = Array.isArray(data) ? data.map((d: { leader_key?: string }) => d.leader_key).filter(Boolean) : [];
+
     return NextResponse.json({
       ok: true,
       deleted: deletedCount,
+      deletedKeys,
+      beforeDelete: allLeaders ?? [],
       message: `Successfully deleted ${deletedCount} leaders from database`
     });
   } catch (err) {
