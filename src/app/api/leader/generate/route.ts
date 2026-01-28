@@ -49,6 +49,7 @@ export async function POST(req: Request) {
         (async () => {
           try {
             // Extract leaderId from generated JSON
+            if (typeof result.leader !== 'string') return;
             const parsed = JSON.parse(result.leader) as unknown;
             const metadata = parsed && typeof parsed === "object" && "metadata" in (parsed as Record<string, unknown>)
               ? (parsed as Record<string, unknown>).metadata
