@@ -634,6 +634,9 @@ export function LeaderDetailApp({ id }: { id: string }) {
   const tabsScrollRef = React.useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = React.useState(false);
   const [canScrollRight, setCanScrollRight] = React.useState(false);
+  const [isDragging, setIsDragging] = React.useState(false);
+  const dragStartX = React.useRef(0);
+  const dragScrollLeft = React.useRef(0);
 
   const updateTabsScrollState = React.useCallback(() => {
     const el = tabsScrollRef.current;
@@ -663,6 +666,44 @@ export function LeaderDetailApp({ id }: { id: string }) {
       behavior: "smooth",
     });
   };
+
+  // Mouse drag scrolling for tabs
+  const handleTabsMouseDown = React.useCallback((e: React.MouseEvent) => {
+    const el = tabsScrollRef.current;
+    if (!el) return;
+    setIsDragging(true);
+    dragStartX.current = e.pageX - el.offsetLeft;
+    dragScrollLeft.current = el.scrollLeft;
+    el.style.scrollBehavior = 'auto'; // Disable smooth scroll during drag
+  }, []);
+
+  const handleTabsMouseMove = React.useCallback((e: React.MouseEvent) => {
+    if (!isDragging) return;
+    e.preventDefault();
+    const el = tabsScrollRef.current;
+    if (!el) return;
+    const x = e.pageX - el.offsetLeft;
+    const walk = (x - dragStartX.current) * 1.5; // Multiply for faster drag
+    el.scrollLeft = dragScrollLeft.current - walk;
+  }, [isDragging]);
+
+  const handleTabsMouseUpOrLeave = React.useCallback(() => {
+    if (isDragging) {
+      const el = tabsScrollRef.current;
+      if (el) {
+        el.style.scrollBehavior = 'smooth'; // Re-enable smooth scroll
+      }
+    }
+    setIsDragging(false);
+  }, [isDragging]);
+
+  // Prevent click event when dragging
+  const handleTabsClick = React.useCallback((e: React.MouseEvent) => {
+    if (isDragging) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }, [isDragging]);
 
   // Extract media URLs
   const mediaUrls = React.useMemo(() => extractMediaUrls(parsed), [parsed]);
@@ -1238,18 +1279,6 @@ export function LeaderDetailApp({ id }: { id: string }) {
       )
     : undefined;
 
-  // Debug: Log scores and reasoning for troubleshooting
-  React.useEffect(() => {
-    if (scores) {
-      console.log('[LeaderDetail] Scores object:', scores);
-      console.log('[LeaderDetail] Has scoringReasoning:', !!scores.scoringReasoning);
-      console.log('[LeaderDetail] scoringReasoning type:', typeof scores.scoringReasoning);
-      if (scores.scoringReasoning) {
-        console.log('[LeaderDetail] scoringReasoning keys:', Object.keys(scores.scoringReasoning as object));
-      }
-    }
-  }, [scores]);
-
   return (
     <>
       {ConfirmDialog}
@@ -1780,11 +1809,19 @@ export function LeaderDetailApp({ id }: { id: string }) {
                       <ChevronRight className="h-3.5 w-3.5" />
                     </button>
 
-                    {/* Scrollable tabs container with smooth scroll */}
+                    {/* Scrollable tabs container with smooth scroll and drag support */}
                     <div
                       ref={tabsScrollRef}
-                      className="overflow-x-auto scrollbar-none scroll-smooth"
+                      className={cn(
+                        "overflow-x-auto scrollbar-none scroll-smooth select-none",
+                        isDragging ? "cursor-grabbing" : "cursor-grab"
+                      )}
                       style={{ scrollBehavior: 'smooth' }}
+                      onMouseDown={handleTabsMouseDown}
+                      onMouseMove={handleTabsMouseMove}
+                      onMouseUp={handleTabsMouseUpOrLeave}
+                      onMouseLeave={handleTabsMouseUpOrLeave}
+                      onClick={handleTabsClick}
                     >
                       <TabsList className="inline-flex h-auto gap-2 bg-transparent p-1 justify-start min-w-full">
                         {sections.map((s) => (
