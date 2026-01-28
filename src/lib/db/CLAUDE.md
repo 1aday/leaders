@@ -8,4 +8,10 @@
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
 | #3444 | 5:21 PM | 🔴 | Fixed video URL persistence by embedding welcomeVideoUrl in leader's raw JSON coreIdentity | ~429 |
+
+### Jan 28, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #3845 | 4:49 PM | 🔴 | Fixed leadership scores being lost during local/remote leader synchronization | ~384 |
 </claude-mem-context>
