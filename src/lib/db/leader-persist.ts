@@ -28,6 +28,12 @@ function pickNumber(obj: AnyRecord | null, key: string): number | undefined {
   return typeof v === "number" ? v : undefined;
 }
 
+function pickNumberRounded(obj: AnyRecord | null, key: string): number | undefined {
+  if (!obj) return undefined;
+  const v = obj[key];
+  return typeof v === "number" ? Math.round(v) : undefined;
+}
+
 export function extractLeaderKey(leaderJson: unknown): string | null {
   const root = isPlainObject(leaderJson) ? leaderJson : null;
   const meta = root && isPlainObject(root.metadata) ? (root.metadata as AnyRecord) : null;
@@ -59,7 +65,7 @@ export function extractLeaderRow(leaderJson: unknown): {
   const vertical = pickString(meta, "vertical") ?? null;
   const sub_domains = pickStringArray(meta, "subDomains") ?? null;
   const tier = pickString(scores, "tier") ?? null;
-  const composite_score = pickNumber(scores, "compositeScore") ?? null;
+  const composite_score = pickNumberRounded(scores, "compositeScore") ?? null;
 
   // Best-effort URLs (your UI also keeps these in localStorage summary objects)
   const profile_pic_url = pickString(core, "profilePicUrl") ?? null;
