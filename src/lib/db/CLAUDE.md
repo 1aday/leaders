@@ -13,5 +13,7 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
-| #3845 | 4:49 PM | 🔴 | Fixed leadership scores being lost during local/remote leader synchronization | ~384 |
+| #3908 | 5:11 PM | 🔵 | Leader database persistence layer with Supabase integration | ~457 |
+| #3906 | " | 🔵 | Leader Database Synchronization System Architecture | ~510 |
+| #3888 | 5:07 PM | 🔵 | Leader database sync system with merge logic and score preservation | ~511 |
 </claude-mem-context>

@@ -13,4 +13,12 @@
 | #3446 | " | 🔴 | Fixed mobile avatar generation not syncing to Supabase for other users | ~401 |
 | #3444 | 5:21 PM | 🔴 | Fixed video URL persistence by embedding welcomeVideoUrl in leader's raw JSON coreIdentity | ~429 |
 | #3443 | " | 🟣 | Avatar generation now embeds profilePicUrl directly into leader JSON coreIdentity | ~368 |
+
+### Jan 28, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #3910 | 5:12 PM | 🔵 | Welcome video generation and persistence flow identified | ~418 |
+| #3898 | 5:08 PM | 🔵 | Leader deletion with sync prevention and database cleanup | ~375 |
+| #3891 | 5:07 PM | 🔵 | Located Leader Storage Functions in LeadersGalleryApp | ~332 |
 </claude-mem-context>
