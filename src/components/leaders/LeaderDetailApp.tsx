@@ -1238,6 +1238,18 @@ export function LeaderDetailApp({ id }: { id: string }) {
       )
     : undefined;
 
+  // Debug: Log scores and reasoning for troubleshooting
+  React.useEffect(() => {
+    if (scores) {
+      console.log('[LeaderDetail] Scores object:', scores);
+      console.log('[LeaderDetail] Has scoringReasoning:', !!scores.scoringReasoning);
+      console.log('[LeaderDetail] scoringReasoning type:', typeof scores.scoringReasoning);
+      if (scores.scoringReasoning) {
+        console.log('[LeaderDetail] scoringReasoning keys:', Object.keys(scores.scoringReasoning as object));
+      }
+    }
+  }, [scores]);
+
   return (
     <>
       {ConfirmDialog}
