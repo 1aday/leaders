@@ -1740,9 +1740,20 @@ export function LeaderDetailApp({ id }: { id: string }) {
                             )}
                           >
                             {m.role === "assistant" ? (
-                              <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5 prose-headings:my-2 prose-code:bg-black/10 prose-code:dark:bg-white/10 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none prose-pre:bg-black/10 prose-pre:dark:bg-white/10">
-                                <ReactMarkdown>{m.content}</ReactMarkdown>
-                              </div>
+                              m.content.trim() ? (
+                                <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5 prose-headings:my-2 prose-code:bg-black/10 prose-code:dark:bg-white/10 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none prose-pre:bg-black/10 prose-pre:dark:bg-white/10">
+                                  <ReactMarkdown>{m.content}</ReactMarkdown>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-2 text-muted-foreground/60">
+                                  <div className="flex gap-1">
+                                    <span className="inline-block w-2 h-2 rounded-full bg-primary/40 animate-pulse" style={{ animationDelay: "0ms", animationDuration: "1.4s" }} />
+                                    <span className="inline-block w-2 h-2 rounded-full bg-primary/40 animate-pulse" style={{ animationDelay: "200ms", animationDuration: "1.4s" }} />
+                                    <span className="inline-block w-2 h-2 rounded-full bg-primary/40 animate-pulse" style={{ animationDelay: "400ms", animationDuration: "1.4s" }} />
+                                  </div>
+                                  <span className="text-xs">Thinking…</span>
+                                </div>
+                              )
                             ) : (
                               <div className="whitespace-pre-wrap">{m.content}</div>
                             )}
