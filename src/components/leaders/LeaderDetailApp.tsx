@@ -29,8 +29,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { cn, calculateCompositeScore } from "@/lib/utils";
 import { safeJsonParse } from "@/lib/safe-json";
-import { getLeaderById, loadLeaders, saveLeaders, markDeleted } from "@/lib/leader-store";
-import { syncLeaderFromDbToLocal } from "@/lib/db/leader-sync";
+import { fetchLeaderById, updateLeader, deleteLeader, fetchLeaderChat, saveLeaderChat, type LeaderSummary } from "@/lib/db/leader-client";
 
 // Helper functions
 function isPlainObject(v: unknown): v is Record<string, unknown> {
@@ -497,19 +496,39 @@ function extractMediaUrls(parsed: unknown): {
 export function LeaderDetailApp({ id }: { id: string }) {
   const router = useRouter();
   const { confirm, ConfirmDialog } = useConfirm();
-  const [refreshKey, setRefreshKey] = React.useState(0);
-  const [leader, setLeader] = React.useState<ReturnType<typeof getLeaderById>>(null);
+  const [leader, setLeader] = React.useState<LeaderSummary | null>(null);
   const [mounted, setMounted] = React.useState(false);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
 
+  // Load leader from database
   React.useEffect(() => {
-    setLeader(getLeaderById(id));
-    setMounted(true);
-  }, [id, refreshKey]);
+    async function loadLeader() {
+      try {
+        setLoading(true);
+        const data = await fetchLeaderById(id);
+        setLeader(data);
 
-  // If user loads a leader page directly, hydrate from DB into localStorage (best-effort).
-  React.useEffect(() => {
-    if (!id) return;
-    syncLeaderFromDbToLocal(id).then(() => setRefreshKey((k) => k + 1)).catch(() => {});
+        // Also load chat history
+        if (data) {
+          try {
+            const chatData = await fetchLeaderChat(data.id);
+            setChatMessages(chatData);
+          } catch (e) {
+            console.warn("Failed to load chat history:", e);
+          }
+        }
+
+        setError(null);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to load leader");
+        console.error("Failed to load leader:", e);
+      } finally {
+        setLoading(false);
+        setMounted(true);
+      }
+    }
+    loadLeader();
   }, [id]);
 
   const parsed = React.useMemo(() => {
@@ -523,38 +542,22 @@ export function LeaderDetailApp({ id }: { id: string }) {
   const [chatSending, setChatSending] = React.useState(false);
   const [chatError, setChatError] = React.useState<string | null>(null);
 
-  React.useEffect(() => {
-    if (!leader) return;
-    if (typeof window === "undefined") return;
-    try {
-      const raw = window.localStorage.getItem(chatStorageKey(leader.id));
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as unknown;
-      if (!Array.isArray(parsed)) return;
-      const msgs = parsed
-        .filter((m) => m && typeof m === "object")
-        .map((m) => m as Partial<ChatMsg>)
-        .filter(
-          (m): m is ChatMsg =>
-            typeof m.id === "string" &&
-            (m.role === "user" || m.role === "assistant") &&
-            typeof m.content === "string" &&
-            typeof m.createdAt === "number",
-        );
-      setChatMessages(msgs);
-    } catch {
-      // ignore
-    }
-  }, [leader]);
+  // Chat is now loaded in the main loadLeader useEffect above
 
+  // Debounced save to database
   React.useEffect(() => {
-    if (!leader) return;
-    if (typeof window === "undefined") return;
-    try {
-      window.localStorage.setItem(chatStorageKey(leader.id), JSON.stringify(chatMessages.slice(-80)));
-    } catch {
-      // ignore
-    }
+    if (!leader || chatMessages.length === 0) return;
+
+    const timer = setTimeout(async () => {
+      try {
+        await saveLeaderChat(leader.id, chatMessages.slice(-80));
+      } catch (e) {
+        console.warn("Failed to save chat:", e);
+        // Non-blocking - chat continues to work in memory
+      }
+    }, 2000); // Debounce 2 seconds
+
+    return () => clearTimeout(timer);
   }, [chatMessages, leader]);
 
   // Intelligent auto-scroll: only scroll if user is already at bottom
@@ -749,6 +752,46 @@ export function LeaderDetailApp({ id }: { id: string }) {
 
   if (!mounted) return null;
 
+  // Loading state
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading leader...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center max-w-md">
+          <h2 className="font-display text-2xl font-medium text-destructive mb-4">
+            Error loading leader
+          </h2>
+          <p className="text-muted-foreground mb-6">{error}</p>
+          <div className="flex gap-3 justify-center">
+            <button
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90"
+            >
+              Retry
+            </button>
+            <Button asChild variant="outline">
+              <Link href="/">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Back to gallery
+              </Link>
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!leader) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -771,22 +814,16 @@ export function LeaderDetailApp({ id }: { id: string }) {
   }
 
   const handleDelete = async () => {
-    // Mark as deleted FIRST to prevent re-sync/re-seed from adding it back
-    markDeleted(leader.id);
     const leaderKey = extractLeaderKeyFromRawJson(leader.rawJson) ?? leader.id;
-    if (leaderKey !== leader.id) {
-      markDeleted(leaderKey);
-    }
 
-    // Best-effort: also delete from Supabase (if configured)
     try {
-      await fetch(`/api/leader/${encodeURIComponent(leaderKey)}`, { method: "DELETE" });
-    } catch {
-      // ignore
+      // Delete from database (single source of truth)
+      await deleteLeader(leaderKey);
+      router.push("/");
+    } catch (e) {
+      console.error("Failed to delete leader:", e);
+      setError(e instanceof Error ? e.message : "Failed to delete leader");
     }
-    const next = loadLeaders().filter((l) => l.id !== leader.id);
-    saveLeaders(next);
-    router.push("/");
   };
 
   const handleCopyJson = async () => {
@@ -1043,61 +1080,40 @@ export function LeaderDetailApp({ id }: { id: string }) {
 
       // Update the leader's raw JSON to embed the profilePicUrl in coreIdentity
       const now = new Date().toISOString();
-      const current = loadLeaders();
-      const idx = current.findIndex((l) => l.id === leader.id);
-      if (idx >= 0) {
-        const next = [...current];
+      let updatedRawJson = leader.rawJson;
 
-        // Parse and update the raw JSON to include profilePicUrl in coreIdentity
-        let updatedRawJson = next[idx].rawJson;
-        try {
-          const leaderJson = JSON.parse(next[idx].rawJson) as unknown;
-          if (leaderJson && typeof leaderJson === 'object') {
-            const leaderObj = leaderJson as Record<string, unknown>;
+      try {
+        const leaderJson = JSON.parse(leader.rawJson) as unknown;
+        if (leaderJson && typeof leaderJson === 'object') {
+          const leaderObj = leaderJson as Record<string, unknown>;
 
-            // Ensure coreIdentity exists
-            if (!leaderObj.coreIdentity || typeof leaderObj.coreIdentity !== 'object') {
-              leaderObj.coreIdentity = {};
-            }
-
-            // Update profilePicUrl in coreIdentity with cache-busting timestamp
-            (leaderObj.coreIdentity as Record<string, unknown>).profilePicUrl = urlWithCacheBust;
-
-            // Also update lastModified if metadata exists
-            if (leaderObj.metadata && typeof leaderObj.metadata === 'object') {
-              (leaderObj.metadata as Record<string, unknown>).lastModified = now;
-            }
-
-            updatedRawJson = JSON.stringify(leaderObj, null, 2);
+          // Ensure coreIdentity exists
+          if (!leaderObj.coreIdentity || typeof leaderObj.coreIdentity !== 'object') {
+            leaderObj.coreIdentity = {};
           }
-        } catch (e) {
-          console.warn('[Avatar] Failed to update raw JSON with profilePicUrl:', e);
-        }
 
-        next[idx] = {
-          ...next[idx],
-          profilePicUrl: urlWithCacheBust,
-          updatedAt: now,
-          rawJson: updatedRawJson
-        };
-        saveLeaders(next);
+          // Update profilePicUrl in coreIdentity with cache-busting timestamp
+          (leaderObj.coreIdentity as Record<string, unknown>).profilePicUrl = urlWithCacheBust;
 
-        // Sync the updated leader to Supabase
-        try {
-          await fetch("/api/leaders", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              leaderRawJson: updatedRawJson,
-              profilePicUrl: urlWithCacheBust,
-            }),
-          });
-        } catch (e) {
-          console.warn('[Avatar] Failed to sync leader to Supabase:', e);
+          // Also update lastModified if metadata exists
+          if (leaderObj.metadata && typeof leaderObj.metadata === 'object') {
+            (leaderObj.metadata as Record<string, unknown>).lastModified = now;
+          }
+
+          updatedRawJson = JSON.stringify(leaderObj, null, 2);
         }
+      } catch (e) {
+        console.warn('[Avatar] Failed to update raw JSON with profilePicUrl:', e);
       }
 
-      setRefreshKey((k) => k + 1);
+      // Update in database
+      await updateLeader(leader.id, updatedRawJson, {
+        profilePicUrl: urlWithCacheBust,
+      });
+
+      // Reload leader to show updated data
+      const refreshed = await fetchLeaderById(leader.id);
+      setLeader(refreshed);
     } catch (e) {
       setAvatarError(e instanceof Error ? e.message : "Avatar generation failed");
     } finally {
@@ -1193,64 +1209,44 @@ export function LeaderDetailApp({ id }: { id: string }) {
 
           // Update the leader's raw JSON to embed the welcomeVideoUrl in coreIdentity
           const now = new Date().toISOString();
-          const current = loadLeaders();
-          const idx = current.findIndex((l) => l.id === leader.id);
-          if (idx >= 0) {
-            const next = [...current];
+          let updatedRawJson = leader.rawJson;
 
-            // Parse and update the raw JSON to include welcomeVideoUrl in coreIdentity
-            let updatedRawJson = next[idx].rawJson;
-            try {
-              const leaderJson = JSON.parse(next[idx].rawJson) as unknown;
-              if (leaderJson && typeof leaderJson === 'object') {
-                const leaderObj = leaderJson as Record<string, unknown>;
+          try {
+            const leaderJson = JSON.parse(leader.rawJson) as unknown;
+            if (leaderJson && typeof leaderJson === 'object') {
+              const leaderObj = leaderJson as Record<string, unknown>;
 
-                // Ensure coreIdentity exists
-                if (!leaderObj.coreIdentity || typeof leaderObj.coreIdentity !== 'object') {
-                  leaderObj.coreIdentity = {};
-                }
-
-                // Update welcomeVideoUrl in coreIdentity with cache-busting timestamp
-                (leaderObj.coreIdentity as Record<string, unknown>).welcomeVideoUrl = videoUrlWithCacheBust;
-
-                // Also update lastModified if metadata exists
-                if (leaderObj.metadata && typeof leaderObj.metadata === 'object') {
-                  (leaderObj.metadata as Record<string, unknown>).lastModified = now;
-                }
-
-                updatedRawJson = JSON.stringify(leaderObj, null, 2);
+              // Ensure coreIdentity exists
+              if (!leaderObj.coreIdentity || typeof leaderObj.coreIdentity !== 'object') {
+                leaderObj.coreIdentity = {};
               }
-            } catch (e) {
-              console.warn('[Video] Failed to update raw JSON with welcomeVideoUrl:', e);
-            }
 
-            next[idx] = {
-              ...next[idx],
-              welcomeVideoUrl: videoUrlWithCacheBust,
-              updatedAt: now,
-              rawJson: updatedRawJson
-            };
-            saveLeaders(next);
+              // Update welcomeVideoUrl in coreIdentity with cache-busting timestamp
+              (leaderObj.coreIdentity as Record<string, unknown>).welcomeVideoUrl = videoUrlWithCacheBust;
 
-            // Sync the updated leader to Supabase
-            try {
-              await fetch("/api/leaders", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  leaderRawJson: updatedRawJson,
-                  welcomeVideoUrl: videoUrlWithCacheBust,
-                }),
-              });
-            } catch (e) {
-              console.warn('[Video] Failed to sync leader to Supabase:', e);
+              // Also update lastModified if metadata exists
+              if (leaderObj.metadata && typeof leaderObj.metadata === 'object') {
+                (leaderObj.metadata as Record<string, unknown>).lastModified = now;
+              }
+
+              updatedRawJson = JSON.stringify(leaderObj, null, 2);
             }
+          } catch (e) {
+            console.warn('[Video] Failed to update raw JSON with welcomeVideoUrl:', e);
           }
+
+          // Update in database
+          await updateLeader(leader.id, updatedRawJson, {
+            welcomeVideoUrl: videoUrlWithCacheBust,
+          });
+
+          // Reload leader to show updated data
+          const refreshed = await fetchLeaderById(leader.id);
+          setLeader(refreshed);
 
           completed = true;
           generatingVideoRef.current = false;
           setGeneratingIntroVideo(false);
-          setRefreshKey((k) => k + 1);
           return;
         }
 
@@ -1283,16 +1279,49 @@ export function LeaderDetailApp({ id }: { id: string }) {
     <>
       {ConfirmDialog}
     <div className="min-h-screen bg-background overflow-x-hidden">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 py-8">
-        {/* Back nav */}
-        <nav className="mb-8">
-          <Button asChild variant="ghost" size="sm" className="gap-2 text-muted-foreground hover:text-foreground -ml-3">
+      {/* Top Navigation */}
+      <nav className="sticky top-0 z-50 border-b border-border/40 bg-background/80 backdrop-blur-lg">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 h-16 flex items-center justify-between">
+          {/* Left: Back button */}
+          <Button asChild variant="ghost" size="sm" className="gap-2 text-muted-foreground hover:text-foreground">
             <Link href="/">
               <ArrowLeft className="h-4 w-4" />
-              Back to gallery
+              <span className="hidden sm:inline">Gallery</span>
             </Link>
           </Button>
-        </nav>
+
+          {/* Center: Logo */}
+          <Link href="/" className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2 group">
+            <span className="text-lg font-semibold bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent group-hover:from-accent group-hover:via-primary group-hover:to-accent transition-all duration-300">
+              Leaders.ai
+            </span>
+          </Link>
+
+          {/* Right: Actions */}
+          <div className="flex items-center gap-2">
+            {leader && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={async () => {
+                  const shouldDelete = await confirm({
+                    title: "Delete this leader?",
+                    message: "This action cannot be undone.",
+                    confirmText: "Delete",
+                    cancelText: "Cancel",
+                  });
+                  if (shouldDelete) await handleDelete();
+                }}
+                className="text-muted-foreground hover:text-destructive"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+        </div>
+      </nav>
+
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 py-8">
 
         <div className="grid gap-10 lg:grid-cols-[340px_1fr]">
           {/* LEFT SIDEBAR */}
