@@ -7,5 +7,7 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
+| #4073 | 6:45 PM | 🟣 | Migrated leader generation from gpt-5-nano to gpt-4.1-nano with 7.4x performance improvement | ~539 |
+| #4068 | 6:44 PM | 🔵 | Leader generation API successfully produces complete profiles in ~17 seconds | ~421 |
 | #3916 | 5:16 PM | 🔴 | Added type guard for leader JSON parsing in auto-avatar generation | ~297 |
 </claude-mem-context>

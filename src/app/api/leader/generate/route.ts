@@ -87,8 +87,13 @@ export async function POST(req: Request) {
           }
         })();
 
-        // Send final result
-        const sseData = `data: ${JSON.stringify({ type: "complete", leader: result.leader, model: result.model })}\n\n`;
+        // Send final result with timing metrics
+        const sseData = `data: ${JSON.stringify({
+          type: "complete",
+          leader: result.leader,
+          model: result.model,
+          timing: result.timing,
+        })}\n\n`;
         writer.write(encoder.encode(sseData));
         writer.close();
       } catch (error) {

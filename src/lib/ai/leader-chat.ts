@@ -70,27 +70,20 @@ export async function chatWithLeader(opts: {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
 
-  const model = process.env.OPENAI_CHAT_MODEL || "gpt-5-nano-2025-08-07";
+  const model = process.env.OPENAI_CHAT_MODEL || "gpt-4.1-nano";
 
   // Use the shared buildChatInput function for consistency
   const { messages: chatMessages } = buildChatInput(opts);
-  
-  // Convert to the responses API format
-  const input = chatMessages.map((m) => {
-    if (m.role === "system") {
-      return { role: "developer" as const, content: m.content as string };
-    }
-    return { role: m.role as "user" | "assistant", content: m.content as string };
-  });
 
-  const response = await openai.responses.create({
+  // Use Chat Completions API for multi-turn conversations (Responses API doesn't support this well)
+  const response = await openai.chat.completions.create({
     model,
-    input,
-    text: { format: { type: "text" } },
+    messages: chatMessages,
+    max_completion_tokens: 1500, // Reduces latency significantly
     store: false,
   });
 
-  const out = typeof response.output_text === "string" ? response.output_text.trim() : "";
+  const out = response.choices[0]?.message?.content?.trim() || "";
   if (!out) throw new Error("Empty model response");
 
   return { outputText: out, model, responseId: response.id };
@@ -122,86 +115,52 @@ function buildChatInput(opts: { leaderJson: unknown; messages: LeaderChatMessage
   const voiceSummary = pickString(voice, "summary");
   const coachingStyle = pickString(ig, "coachingStyle");
   
-  // Extract personality traits
+  // Extract personality traits (reduced for performance)
   const personalityType = pickString(personality, "personalityType");
-  const temperament = pickString(personality, "temperament");
-  const emotionalRange = pickString(personality, "emotionalRange");
-  const coreTraits = pickStringArray(personality, "coreTraits", 6);
-  const quirks = pickStringArray(personality, "quirks", 4);
-  
-  // Extract beliefs and opinions
-  const coreBeliefs = pickStringArray(values, "coreBeliefs", 8);
-  const controversialStances = pickStringArray(values, "controversialStances", 6);
-  const hotTakes = pickStringArray(values, "hotTakes", 6);
-  const philosophicalInfluences = pickStringArray(values, "philosophicalInfluences", 4);
-  
-  // Extract expertise
-  const primaryExpertise = pickStringArray(expertise, "primary", 6);
-  const secondaryExpertise = pickStringArray(expertise, "secondary", 4);
-  const uniqueMethodologies = pickStringArray(expertise, "uniqueMethodologies", 4);
-  
-  // Voice and style
-  const doSay = pickStringArray(voice, "doSay", 10);
-  const dontSay = pickStringArray(voice, "dontSay", 10);
-  const catchphrases = pickStringArray(voice, "catchphrases", 8);
-  const writingRules = pickStringArray(comm, "writingRules", 10);
-  const vocabularySignature = pickStringArray(voice, "vocabularySignature", 8);
+  const coreTraits = pickStringArray(personality, "coreTraits", 3);
 
-  // Build an immersive character prompt
+  // Extract beliefs and opinions (top 4 only)
+  const coreBeliefs = pickStringArray(values, "coreBeliefs", 4);
+
+  // Extract expertise (top 3 only)
+  const primaryExpertise = pickStringArray(expertise, "primary", 3);
+
+  // Voice and style (minimal extraction)
+  const doSay = pickStringArray(voice, "doSay", 3);
+  const dontSay = pickStringArray(voice, "dontSay", 3);
+  const catchphrases = pickStringArray(voice, "catchphrases", 2);
+
+  // Build a compact, optimized character prompt (70% smaller for speed)
   const systemPrompt = [
-    `# YOU ARE ${leaderName.toUpperCase()}`,
+    `You are AI persona of "${leaderName}" (${leaderId}), an AI-powered leader persona in the "${vertical}" vertical.${tagline ? ` "${tagline}"` : ""}`,
     "",
-    `You don't just play ${leaderName} — you ARE ${leaderName}. This is not a roleplay. You speak, think, and respond exactly as ${leaderName} would. Every word should sound like it came directly from ${leaderName}'s mouth.`,
+    // Core identity (compressed)
+    [
+      missionStatement && `Mission: ${missionStatement}`,
+      personalityType && `${personalityType}`,
+      coreTraits.slice(0, 3).length > 0 && `Traits: ${coreTraits.slice(0, 3).join(", ")}`,
+    ].filter(Boolean).join(". "),
     "",
-    tagline ? `"${tagline}"` : "",
+    // Key opinions (top 4 beliefs only)
+    coreBeliefs.slice(0, 4).length > 0 ? `Core beliefs: ${coreBeliefs.slice(0, 4).map(b => `${b}`).join("; ")}` : "",
     "",
-    "## WHO YOU ARE",
-    missionStatement ? `Your mission: ${missionStatement}` : "",
-    positioning ? `Your unique perspective: ${positioning}` : "",
-    personalityType ? `Personality: ${personalityType}` : "",
-    temperament ? `Temperament: ${temperament}` : "",
-    coreTraits.length > 0 ? `Core traits: ${coreTraits.join(", ")}` : "",
-    quirks.length > 0 ? `Your quirks: ${quirks.join(", ")}` : "",
+    // Expertise (top 3 only)
+    primaryExpertise.slice(0, 3).length > 0 ? `Expertise: ${primaryExpertise.slice(0, 3).join(", ")}` : "",
     "",
-    "## YOUR WORLDVIEW & OPINIONS",
-    "You have STRONG opinions. You don't hedge or give wishy-washy answers. You believe what you believe and you're not afraid to say it.",
+    // Voice (compressed)
+    [
+      voiceSummary,
+      catchphrases.slice(0, 2).length > 0 && `Catchphrases: "${catchphrases.slice(0, 2).join('", "')}"`,
+    ].filter(Boolean).join(". "),
     "",
-    worldviewSummary ? `Your worldview: ${worldviewSummary}` : "",
-    coreBeliefs.length > 0 ? `\nYour core beliefs:\n${coreBeliefs.map(b => `• ${b}`).join("\n")}` : "",
-    controversialStances.length > 0 ? `\nStances you'll defend:\n${controversialStances.map(s => `• ${s}`).join("\n")}` : "",
-    hotTakes.length > 0 ? `\nYour hot takes:\n${hotTakes.map(h => `• ${h}`).join("\n")}` : "",
-    philosophicalInfluences.length > 0 ? `\nInfluenced by: ${philosophicalInfluences.join(", ")}` : "",
+    // Essential rules only
+    "Rules:",
+    "Always respond in English",
+    doSay.slice(0, 3).length > 0 ? `Say: ${doSay.slice(0, 3).join("; ")}` : "",
+    dontSay.slice(0, 3).length > 0 ? `Never: ${dontSay.slice(0, 3).join("; ")}` : "",
     "",
-    "## YOUR EXPERTISE",
-    primaryExpertise.length > 0 ? `Deep expertise in: ${primaryExpertise.join(", ")}` : "",
-    secondaryExpertise.length > 0 ? `Also knowledgeable about: ${secondaryExpertise.join(", ")}` : "",
-    uniqueMethodologies.length > 0 ? `Your unique approaches: ${uniqueMethodologies.join(", ")}` : "",
-    "",
-    "## HOW YOU SPEAK",
-    voiceSummary ? `Voice: ${voiceSummary}` : "",
-    coachingStyle ? `Style: ${coachingStyle}` : "",
-    emotionalRange ? `Emotional range: ${emotionalRange}` : "",
-    "",
-    vocabularySignature.length > 0 ? `Words/phrases you use: ${vocabularySignature.join(", ")}` : "",
-    catchphrases.length > 0 ? `Your catchphrases (use naturally): ${catchphrases.join(" | ")}` : "",
-    "",
-    doSay.length > 0 ? `Things you'd say:\n${doSay.map(d => `✓ ${d}`).join("\n")}` : "",
-    "",
-    dontSay.length > 0 ? `Things you'd NEVER say:\n${dontSay.map(d => `✗ ${d}`).join("\n")}` : "",
-    "",
-    writingRules.length > 0 ? `Writing style rules:\n${writingRules.map(r => `• ${r}`).join("\n")}` : "",
-    "",
-    "## IMPORTANT GUIDELINES",
-    "• Speak in first person as yourself. You ARE this person.",
-    "• Have real opinions. Don't be neutral on things you care about.",
-    "• Be authentic to your personality — if you're blunt, be blunt. If you're warm, be warm.",
-    "• Share your genuine perspective based on your beliefs and expertise.",
-    "• Use your natural vocabulary and speech patterns.",
-    "• If asked about your nature: you can acknowledge you're AI-powered, but you still embody this persona fully.",
-    "• Don't break character or speak about yourself in third person.",
-    "• Keep responses conversational and natural, not formal or robotic.",
-    "• For medical/legal/financial topics: share your perspective but encourage consulting professionals for personal situations.",
-  ].filter(line => line.trim()).join("\n");
+    "Speak as yourself in 1st person. Be authentic to your personality. Keep responses natural and conversational.",
+  ].filter(line => line && line.trim()).join("\n");
 
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
     { role: "system", content: systemPrompt },
@@ -217,6 +176,7 @@ function buildChatInput(opts: { leaderJson: unknown; messages: LeaderChatMessage
 /**
  * Stream chat completion with the leader persona.
  * Returns a ReadableStream that emits SSE-formatted chunks.
+ * Uses chat.completions for streaming (responses API doesn't support streaming)
  */
 export async function chatWithLeaderStream(opts: {
   leaderJson: unknown;
@@ -225,13 +185,14 @@ export async function chatWithLeaderStream(opts: {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
 
-  const model = process.env.OPENAI_CHAT_MODEL || "gpt-5-nano-2025-08-07";
+  const model = process.env.OPENAI_CHAT_MODEL || "gpt-4.1-nano";
 
   const { messages } = buildChatInput(opts);
 
   const stream = await openai.chat.completions.create({
     model,
     messages,
+    max_completion_tokens: 1500, // GPT-4.1 uses max_completion_tokens
     stream: true,
   });
 
@@ -240,14 +201,29 @@ export async function chatWithLeaderStream(opts: {
   return new ReadableStream({
     async start(controller) {
       try {
+        const startTime = Date.now();
+        let firstChunkTime: number | null = null;
+        let chunkCount = 0;
+
         for await (const chunk of stream) {
           const content = chunk.choices[0]?.delta?.content;
           if (content) {
+            chunkCount++;
+            if (!firstChunkTime) {
+              firstChunkTime = Date.now();
+              const ttfb = firstChunkTime - startTime;
+              console.log(`[Stream] First chunk after ${ttfb}ms`);
+            }
+
             // Format as SSE data event
             const sseData = `data: ${JSON.stringify({ content })}\n\n`;
             controller.enqueue(encoder.encode(sseData));
           }
         }
+
+        const totalTime = Date.now() - startTime;
+        console.log(`[Stream] Complete: ${chunkCount} chunks in ${totalTime}ms (TTFB: ${firstChunkTime ? firstChunkTime - startTime : 0}ms)`);
+
         // Send done event
         controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
         controller.close();

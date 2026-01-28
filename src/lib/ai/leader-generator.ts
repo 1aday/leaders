@@ -1,4 +1,6 @@
 import "server-only";
+import { openai } from "@/lib/ai/openai-client";
+import { LEADER_SCHEMA_RESPONSES } from "@/lib/ai/leader-schema-responses";
 
 type AnyRecord = Record<string, unknown>;
 
@@ -83,6 +85,11 @@ export type GenerateLeaderBibleInput = {
 export type GenerateLeaderBibleResult = {
   leader: unknown;
   model: string;
+  timing?: {
+    ttft: number; // Time to first token in seconds
+    totalTime: number; // Total generation time in seconds
+    chunks: number; // Number of chunks received
+  };
 };
 
 /**
@@ -992,7 +999,7 @@ export async function generateLeaderBibleWithOpenAI(input: GenerateLeaderBibleIn
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
 
-  const model = process.env.OPENAI_STRUCTURED_MODEL || "gpt-5-nano-2025-08-07";
+  const model = "gpt-4.1-nano"; // Fast model with structured output support
   const now = new Date();
   const date = toIsoDate(now);
   const iso = now.toISOString();
@@ -1327,122 +1334,91 @@ Cultural Name Matching & Demographic Diversity:
 
 Return the complete JSON matching the schema.`;
 
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
+  // Use Responses API with structured output for guaranteed schema compliance
+  const stream = await openai.responses.create({
+    model,
+    stream: true,
+    input: [
+      {
+        role: "system",
+        content: [{ type: "input_text", text: system }],
+      },
+      {
+        role: "user",
+        content: [{ type: "input_text", text: user }],
+      },
+    ],
+    text: {
+      format: {
+        type: "json_schema",
+        name: "leader_profile",
+        schema: LEADER_SCHEMA_RESPONSES,
+      },
     },
-    body: JSON.stringify({
-      model,
-      stream: true,
-      stream_options: {
-        include_usage: true,
-      },
-      response_format: {
-        type: "json_object",
-      },
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
-    }),
+    max_output_tokens: 16384,
   });
 
   console.timeEnd("[Leader Gen] OpenAI fetch");
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`OpenAI error (${res.status}): ${text || res.statusText}`);
-  }
-
-  // Parse streaming response
-  if (!res.body) {
-    throw new Error("Response body is null");
-  }
-
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
   let fullContent = "";
-
-  // Estimate: A full Leader Bible is typically 8000-10000 tokens
-  const ESTIMATED_TOTAL_TOKENS = 9000;
   let currentTokenCount = 0;
   let chunkCount = 0;
   const startTime = Date.now();
+  let firstTokenTime: number | null = null;
+  const ESTIMATED_TOTAL_TOKENS = 9000;
 
   try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+    for await (const chunk of stream) {
+      // Track time to first token (TTFT)
+      if (!firstTokenTime && chunk.type === "response.output_text.delta") {
+        firstTokenTime = Date.now();
+        const ttft = (firstTokenTime - startTime) / 1000;
+        console.log(`[Leader Gen] Time to first token: ${ttft.toFixed(3)}s`);
+      }
 
-      chunkCount++;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
+      // Accumulate content from delta events
+      if (chunk.type === "response.output_text.delta" && chunk.delta) {
+        fullContent += chunk.delta;
+        chunkCount++;
 
-      for (const line of lines) {
-        if (!line.trim() || line.trim() === "data: [DONE]") continue;
-        if (!line.startsWith("data: ")) continue;
+        // Rough token estimation: ~4 chars per token
+        const deltaTokens = Math.ceil(chunk.delta.length / 4);
+        currentTokenCount += deltaTokens;
 
-        try {
-          const json = JSON.parse(line.slice(6));
-
-          // Check for refusal
-          const refusal = json.choices?.[0]?.delta?.refusal || json.choices?.[0]?.message?.refusal;
-          if (typeof refusal === "string" && refusal.trim()) {
-            throw new Error(refusal.trim());
-          }
-
-          // Accumulate content
-          const delta = json.choices?.[0]?.delta?.content;
-          if (typeof delta === "string" && delta.length > 0) {
-            fullContent += delta;
-
-            // Rough token estimation: ~4 chars per token
-            const deltaTokens = Math.ceil(delta.length / 4);
-            currentTokenCount += deltaTokens;
-
-            // Report progress (cap at 99% until done)
-            if (input.onProgress) {
-              const percentage = Math.min(99, Math.round((currentTokenCount / ESTIMATED_TOTAL_TOKENS) * 100));
-              input.onProgress({
-                tokens: currentTokenCount,
-                estimatedTotal: ESTIMATED_TOTAL_TOKENS,
-                percentage,
-              });
-            }
-          }
-        } catch (e) {
-          if (e instanceof Error && e.message.includes("refusal")) {
-            throw e;
-          }
-          // Skip other malformed lines
+        // Report progress (cap at 99% until done)
+        if (input.onProgress) {
+          const percentage = Math.min(99, Math.round((currentTokenCount / ESTIMATED_TOTAL_TOKENS) * 100));
+          input.onProgress({
+            tokens: currentTokenCount,
+            estimatedTotal: ESTIMATED_TOTAL_TOKENS,
+            percentage,
+          });
         }
       }
 
-      // Fallback progress based on chunks and time (for json_schema mode)
-      // Send progress update every 5 chunks or every 2 seconds
-      if (input.onProgress && currentTokenCount === 0 && (chunkCount % 5 === 0 || Date.now() - startTime > 2000)) {
+      // Fallback progress for long-running generations
+      if (input.onProgress && chunkCount > 0 && chunkCount % 50 === 0) {
         const elapsedSeconds = (Date.now() - startTime) / 1000;
-        // Assume ~30 second total generation time, cap at 95%
-        const timeBasedProgress = Math.min(95, Math.round((elapsedSeconds / 30) * 100));
-        const chunkBasedProgress = Math.min(95, Math.round((chunkCount / 100) * 100));
-        const percentage = Math.max(timeBasedProgress, chunkBasedProgress);
+        const timeBasedProgress = Math.min(95, Math.round((elapsedSeconds / 10) * 100));
+        const tokenBasedProgress = Math.min(95, Math.round((currentTokenCount / ESTIMATED_TOTAL_TOKENS) * 100));
+        const percentage = Math.max(timeBasedProgress, tokenBasedProgress);
 
         if (percentage > 0) {
           input.onProgress({
-            tokens: 0,
+            tokens: currentTokenCount,
             estimatedTotal: ESTIMATED_TOTAL_TOKENS,
             percentage,
           });
         }
       }
     }
-  } finally {
-    reader.releaseLock();
+  } catch (error) {
+    throw new Error(`OpenAI streaming error: ${error instanceof Error ? error.message : String(error)}`);
   }
+
+  const totalTime = (Date.now() - startTime) / 1000;
+  const ttft = firstTokenTime ? (firstTokenTime - startTime) / 1000 : 0;
+  console.log(`[Leader Gen] Generation complete: TTFT=${ttft.toFixed(3)}s, Total=${totalTime.toFixed(3)}s, Chunks=${chunkCount}`);
 
   // Final progress update: 100%
   if (input.onProgress) {
@@ -1614,5 +1590,13 @@ Return the complete JSON matching the schema.`;
   }
 
   console.timeEnd("[Leader Gen] Total");
-  return { leader, model };
+  return {
+    leader,
+    model,
+    timing: {
+      ttft,
+      totalTime,
+      chunks: chunkCount,
+    },
+  };
 }
