@@ -17,8 +17,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { cn } from "@/lib/utils";
-import { loadLeaders, saveLeaders, seedLeadersIfEmpty, markDeleted, type LeaderSummary } from "@/lib/leader-store";
-import { syncLeadersFromDbToLocal } from "@/lib/db/leader-sync";
+import { fetchLeaders, deleteLeader, type LeaderSummary } from "@/lib/db/leader-client";
 
 // Generate initials from name
 function getInitials(name: string) {
@@ -501,6 +500,8 @@ function CollageImage({
 export function LeadersGalleryApp() {
   const [leaders, setLeaders] = React.useState<LeaderSummary[]>([]);
   const [mounted, setMounted] = React.useState(false);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
   const [sort, setSort] = React.useState<"updated" | "score" | "name">("updated");
   const [vertical, setVertical] = React.useState<string>("All");
   const [tier, setTier] = React.useState<string>("All");
@@ -510,14 +511,21 @@ export function LeadersGalleryApp() {
   const { confirm, ConfirmDialog } = useConfirm();
 
   React.useEffect(() => {
-    // Load existing leaders only, don't auto-seed samples
-    setLeaders(loadLeaders());
-    setMounted(true);
-
-    // Hydrate localStorage from Supabase (best-effort).
-    syncLeadersFromDbToLocal().then((merged) => {
-      setLeaders(merged);
-    }).catch(() => {});
+    async function loadData() {
+      try {
+        setLoading(true);
+        const data = await fetchLeaders({ limit: 200 });
+        setLeaders(data);
+        setError(null);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to load leaders");
+        console.error("Failed to load leaders:", e);
+      } finally {
+        setLoading(false);
+        setMounted(true);
+      }
+    }
+    loadData();
   }, []);
 
   const handleDeleteLeader = React.useCallback(async (leaderId: string) => {
@@ -534,23 +542,26 @@ export function LeadersGalleryApp() {
 
     if (!confirmed) return;
 
-    // Mark as deleted FIRST to prevent re-sync/re-seed from adding it back
-    markDeleted(leaderId);
     const leaderKey = l ? (extractLeaderKeyFromRawJson(l.rawJson) ?? l.id) : leaderId;
-    if (leaderKey !== leaderId) {
-      markDeleted(leaderKey);
-    }
 
-    // Best-effort: also delete from Supabase (if configured)
     try {
-      await fetch(`/api/leader/${encodeURIComponent(leaderKey)}`, { method: "DELETE" });
-    } catch {
-      // ignore
-    }
+      // Delete from database (single source of truth)
+      await deleteLeader(leaderKey);
 
-    const next = loadLeaders().filter((x) => x.id !== leaderId);
-    saveLeaders(next);
-    setLeaders(next);
+      // Optimistic update: remove from UI immediately
+      setLeaders((prev) => prev.filter((x) => x.id !== leaderId));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to delete leader");
+      console.error("Failed to delete leader:", e);
+
+      // Reload from database to get current state
+      try {
+        const data = await fetchLeaders({ limit: 200 });
+        setLeaders(data);
+      } catch (reloadErr) {
+        console.error("Failed to reload leaders:", reloadErr);
+      }
+    }
   }, [leaders, confirm]);
 
   const enhanced = React.useMemo((): LeaderDerived[] => {
@@ -624,6 +635,35 @@ export function LeadersGalleryApp() {
   }, [enhanced, sort, status, tier, vertical]);
 
   if (!mounted) return null;
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading leaders...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <p className="text-destructive mb-4">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>

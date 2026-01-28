@@ -21,7 +21,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn, calculateCompositeScore } from "@/lib/utils";
 import { safeJsonParse } from "@/lib/safe-json";
-import { deriveLeaderSummary, upsertLeader, loadLeaders, saveLeaders } from "@/lib/leader-store";
+import { createLeader, updateLeader, deriveLeaderSummary } from "@/lib/db/leader-client";
 
 // Simple JSON syntax highlighter with pretty-printing
 function JsonSyntaxHighlight({ json }: { json: string }) {
@@ -309,32 +309,32 @@ export function NewLeaderApp() {
   const handleSave = React.useCallback(async () => {
     if (!parsed) return;
     setSaving(true);
-    await new Promise((r) => setTimeout(r, 400));
-    const summary = deriveLeaderSummary(parsed, raw);
-    const saved = upsertLeader(summary);
 
-    // Auto-generate avatar after saving leader
     try {
-      const avatarRes = await fetch("/api/avatar", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          leaderRawJson: raw,
-          leaderId: saved.id,
-          aspectRatio: "1:1",
-          outputFormat: "png",
-        }),
-      });
+      await new Promise((r) => setTimeout(r, 400));
+      const summary = deriveLeaderSummary(parsed, raw);
 
-      if (avatarRes.ok) {
-        const avatarData = await avatarRes.json() as { profilePicUrl?: string };
-        if (avatarData.profilePicUrl) {
-          // Update the saved leader with the avatar URL
-          const urlWithCacheBust = avatarData.profilePicUrl + (avatarData.profilePicUrl.includes('?') ? '&' : '?') + `t=${Date.now()}`;
-          const current = loadLeaders();
-          const idx = current.findIndex((l) => l.id === saved.id);
-          if (idx >= 0) {
-            const next = [...current];
+      // Create leader in database
+      const { leaderId, leaderKey } = await createLeader(raw);
+
+      // Auto-generate avatar after saving leader
+      try {
+        const avatarRes = await fetch("/api/avatar", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            leaderRawJson: raw,
+            leaderId: leaderId,
+            aspectRatio: "1:1",
+            outputFormat: "png",
+          }),
+        });
+
+        if (avatarRes.ok) {
+          const avatarData = await avatarRes.json() as { profilePicUrl?: string };
+          if (avatarData.profilePicUrl) {
+            // Update the leader with the avatar URL
+            const urlWithCacheBust = avatarData.profilePicUrl + (avatarData.profilePicUrl.includes('?') ? '&' : '?') + `t=${Date.now()}`;
 
             // Update raw JSON to include profilePicUrl in coreIdentity
             try {
@@ -345,25 +345,28 @@ export function NewLeaderApp() {
               (leaderJson.coreIdentity as Record<string, unknown>).profilePicUrl = urlWithCacheBust;
 
               const updatedRawJson = JSON.stringify(leaderJson, null, 2);
-              next[idx] = {
-                ...next[idx],
+
+              // Update in database
+              await updateLeader(leaderKey, updatedRawJson, {
                 profilePicUrl: urlWithCacheBust,
-                updatedAt: new Date().toISOString(),
-                rawJson: updatedRawJson
-              };
-              saveLeaders(next);
+              });
             } catch (e) {
               console.warn('[Auto-Avatar] Failed to update leader with avatar URL:', e);
             }
           }
         }
+      } catch (e) {
+        // Avatar generation is best-effort, don't block navigation
+        console.warn('[Auto-Avatar] Failed to generate avatar:', e);
       }
-    } catch (e) {
-      // Avatar generation is best-effort, don't block navigation
-      console.warn('[Auto-Avatar] Failed to generate avatar:', e);
-    }
 
-    router.push(`/leaders/${encodeURIComponent(saved.id)}`);
+      // Navigate to detail page
+      router.push(`/leaders/${encodeURIComponent(leaderKey)}`);
+    } catch (e) {
+      setSaving(false);
+      setError(e instanceof Error ? e.message : "Failed to save leader");
+      console.error("Failed to save leader:", e);
+    }
   }, [parsed, raw, router]);
 
   const reset = React.useCallback(() => {

@@ -1306,9 +1306,10 @@ export function LeaderDetailApp({ id }: { id: string }) {
                 onClick={async () => {
                   const shouldDelete = await confirm({
                     title: "Delete this leader?",
-                    message: "This action cannot be undone.",
+                    description: "This action cannot be undone.",
                     confirmText: "Delete",
                     cancelText: "Cancel",
+                    variant: "danger",
                   });
                   if (shouldDelete) await handleDelete();
                 }}

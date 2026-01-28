@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { ClearOldStorage } from "@/components/ClearOldStorage";
 
 export const metadata: Metadata = {
   title: "Profilemaker — Leader Dossiers",
@@ -13,7 +14,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="antialiased">{children}</body>
+      <body className="antialiased">
+        <ClearOldStorage />
+        {children}
+      </body>
     </html>
   );
 }

@@ -164,13 +164,16 @@ function buildVariedPrompt(opts: {
 /**
  * Extracts visual attributes from the Leader Bible schema and builds a structured prompt
  * for Nano Banana image generation.
+ *
+ * IMPORTANT: Always uses the exact Physical Description from the leader profile.
+ * No randomization - avatar must match the leader's defined identity attributes.
  */
 function buildVisualAttributesPrompt(opts: {
   physical: AnyRecord | null;
   visualStyle: AnyRecord | null;
-  isRegeneration?: boolean;
+  isRegeneration?: boolean; // Ignored - kept for API compatibility
 }): string {
-  const { physical, visualStyle, isRegeneration } = opts;
+  const { physical, visualStyle } = opts;
 
   // Extract physical attributes
   const apparentAge = pickString(physical, "apparentAge");
@@ -183,13 +186,13 @@ function buildVisualAttributesPrompt(opts: {
 
   // Extract hair attributes
   const hair = physical && isPlainObject(physical.hair) ? (physical.hair as AnyRecord) : null;
-  let hairColor = pickString(hair, "color");
-  let hairStyle = pickString(hair, "style");
-  let hairLength = pickString(hair, "length");
+  const hairColor = pickString(hair, "color");
+  const hairStyle = pickString(hair, "style");
+  const hairLength = pickString(hair, "length");
 
   // Extract eye attributes
   const eyes = physical && isPlainObject(physical.eyes) ? (physical.eyes as AnyRecord) : null;
-  let eyeColor = pickString(eyes, "color");
+  const eyeColor = pickString(eyes, "color");
   const eyeFeatures = pickString(eyes, "notableFeatures");
 
   // Extract style attributes
@@ -204,77 +207,6 @@ function buildVisualAttributesPrompt(opts: {
     : [];
   const accentColor = primaryColors[0]?.name || primaryColors[0]?.hex;
 
-  // When regenerating, add significant variation while keeping ethnicity/gender consistent
-  if (isRegeneration) {
-    // Randomize hair for major variety
-    const hairColors = [
-      "jet black", "dark brown", "chestnut brown", "light brown", "honey blonde",
-      "platinum blonde", "auburn", "copper red", "silver gray", "salt and pepper",
-      "ash brown", "caramel", "mahogany"
-    ];
-    const hairStyles = [
-      "straight", "wavy", "tightly curled", "loosely curled", "slicked back",
-      "messy textured", "swept side", "pompadour", "undercut", "buzzed short",
-      "flowing", "layered", "choppy", "sleek"
-    ];
-    const hairLengths = [
-      "very short cropped", "short", "medium length", "long flowing",
-      "shoulder-length", "chin-length", "buzz cut"
-    ];
-
-    // Diverse eye colors
-    const eyeColors = [
-      "deep brown", "dark brown", "light brown", "amber", "hazel with green flecks",
-      "blue-gray", "steel blue", "green", "dark green", "honey brown"
-    ];
-
-    // Vary facial features for more distinction
-    const facialFeatureVariations = [
-      "defined cheekbones with angular jawline",
-      "soft rounded features with warm expression",
-      "sharp defined features with prominent brow",
-      "delicate refined features",
-      "strong structured bone structure",
-      "gentle features with kind eyes",
-      "distinctive prominent features",
-      "symmetrical balanced features"
-    ];
-
-    // Vary expressions and mood
-    const expressions = [
-      "confident warm smile", "serious professional demeanor", "thoughtful contemplative look",
-      "friendly approachable smile", "intense focused gaze", "calm serene expression",
-      "energetic enthusiastic expression", "wise knowing look"
-    ];
-
-    // Vary attire for additional distinction
-    const attireOptions = [
-      "crisp business attire", "casual modern clothing", "smart casual outfit",
-      "professional blazer", "relaxed stylish wear", "contemporary fashion",
-      "classic tailored clothing", "minimalist modern style"
-    ];
-
-    hairColor = hairColors[Math.floor(Math.random() * hairColors.length)];
-    hairStyle = hairStyles[Math.floor(Math.random() * hairStyles.length)];
-    hairLength = hairLengths[Math.floor(Math.random() * hairLengths.length)];
-    eyeColor = eyeColors[Math.floor(Math.random() * eyeColors.length)];
-
-    // Override original features with variations
-    return buildVariedPrompt({
-      ethnicity,
-      genderPresentation,
-      apparentAge,
-      hairColor,
-      hairStyle,
-      hairLength,
-      eyeColor,
-      facialFeatures: facialFeatureVariations[Math.floor(Math.random() * facialFeatureVariations.length)],
-      expression: expressions[Math.floor(Math.random() * expressions.length)],
-      attire: attireOptions[Math.floor(Math.random() * attireOptions.length)],
-      buildBodyType
-    });
-  }
-  
   // Build the structured prompt parts
   const parts: string[] = [];
   
@@ -362,89 +294,27 @@ function buildVisualAttributesPrompt(opts: {
 /**
  * Builds a descriptive prompt for famous people with optional variation for regeneration
  */
+/**
+ * Builds avatar prompt for famous people using their name.
+ * IMPORTANT: Always uses consistent prompt - no randomization.
+ * The AI model recognizes famous people by name, so we don't need to vary the prompt.
+ */
 function buildFamousPersonPrompt(name: string, vertical?: string, isRegeneration?: boolean): string {
   const parts: string[] = [];
 
   parts.push(`Professional photorealistic studio headshot of ${name} as they would look in real life`);
   parts.push("authentic likeness");
+  parts.push("confident approachable expression");
+  parts.push("85mm portrait lens");
+  parts.push("soft key light with subtle rim light");
+  parts.push("clean neutral gray gradient background");
+  parts.push("head and shoulders framing");
+  parts.push("looking at camera");
+  parts.push("high detail");
+  parts.push("natural skin texture");
 
-  // Add variation when regenerating
-  if (isRegeneration) {
-    // Vary expression/mood significantly
-    const expressions = [
-      "confident warm smile",
-      "serious thoughtful expression",
-      "friendly approachable demeanor",
-      "intense focused look",
-      "calm serene expression",
-      "animated mid-conversation",
-      "contemplative wise expression",
-      "energetic enthusiastic smile"
-    ];
-
-    // Vary lighting style
-    const lightingStyles = [
-      "soft diffused lighting with subtle shadows",
-      "dramatic side lighting with depth",
-      "bright even lighting",
-      "natural window light",
-      "soft key light with rim light accent",
-      "golden hour warm lighting",
-      "professional studio lighting with catchlights"
-    ];
-
-    // Vary framing and camera angle
-    const framingOptions = [
-      "tight head and shoulders framing, looking at camera",
-      "medium close-up framing, slight angle",
-      "traditional portrait framing, direct gaze",
-      "relaxed framing with natural pose",
-      "close portrait with engaged expression"
-    ];
-
-    // Vary background and context
-    const backgrounds = [
-      "clean neutral gray gradient background",
-      "subtle bokeh background",
-      "minimalist solid background",
-      "soft out-of-focus professional setting",
-      "clean white background with soft shadows"
-    ];
-
-    // Randomly select variations
-    const expression = expressions[Math.floor(Math.random() * expressions.length)];
-    const lighting = lightingStyles[Math.floor(Math.random() * lightingStyles.length)];
-    const framing = framingOptions[Math.floor(Math.random() * framingOptions.length)];
-    const background = backgrounds[Math.floor(Math.random() * backgrounds.length)];
-
-    parts.push(expression);
-    parts.push("85mm portrait lens");
-    parts.push(lighting);
-    parts.push(background);
-    parts.push(framing);
-    parts.push("high detail");
-    parts.push("natural skin texture");
-
-    if (vertical) {
-      parts.push(`professional ${vertical.toLowerCase()} leader aesthetic`);
-    }
-
-    // Add unique seed for AI model variation
-    parts.push(`variation seed ${Math.floor(Math.random() * 1000000)}`);
-  } else {
-    // Original non-regeneration prompt
-    parts.push("confident approachable expression");
-    parts.push("85mm portrait lens");
-    parts.push("soft key light with subtle rim light");
-    parts.push("clean neutral gray gradient background");
-    parts.push("head and shoulders framing");
-    parts.push("looking at camera");
-    parts.push("high detail");
-    parts.push("natural skin texture");
-
-    if (vertical) {
-      parts.push(`professional ${vertical.toLowerCase()} leader aesthetic`);
-    }
+  if (vertical) {
+    parts.push(`professional ${vertical.toLowerCase()} leader aesthetic`);
   }
 
   return parts.join(", ");

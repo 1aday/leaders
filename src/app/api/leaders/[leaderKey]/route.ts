@@ -13,14 +13,30 @@ export async function GET(_req: Request, ctx: { params: Promise<{ leaderKey: str
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase
       .from("leaders")
-      .select("leader_key, raw_json, profile_pic_url, welcome_video_url, created_at, updated_at")
+      .select("leader_key, name, tagline, vertical, sub_domains, tier, composite_score, profile_pic_url, welcome_video_url, raw_json, created_at, updated_at")
       .eq("leader_key", key)
       .maybeSingle();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     if (!data) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    return NextResponse.json({ leader: data });
+    // Transform database fields to match LeaderSummary type
+    const leader = {
+      id: data.leader_key,
+      name: data.name ?? "Untitled Leader",
+      tagline: data.tagline,
+      vertical: data.vertical,
+      subDomains: data.sub_domains,
+      tier: data.tier,
+      compositeScore: data.composite_score,
+      profilePicUrl: data.profile_pic_url,
+      welcomeVideoUrl: data.welcome_video_url,
+      rawJson: JSON.stringify(data.raw_json),
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+    };
+
+    return NextResponse.json({ leader });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: msg }, { status: 500 });

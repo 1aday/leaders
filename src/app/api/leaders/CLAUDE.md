@@ -8,4 +8,10 @@
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
 | #3445 | 5:22 PM | 🟣 | Added POST endpoint to sync leader data from client to Supabase database | ~414 |
+
+### Jan 28, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #3964 | 5:38 PM | 🔴 | Leaders API Now Returns Structured Data Instead of Raw Database Fields | ~412 |
 </claude-mem-context>

@@ -14,12 +14,29 @@ export async function GET(req: Request) {
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase
       .from("leaders")
-      .select("leader_key, raw_json, profile_pic_url, welcome_video_url, created_at, updated_at")
+      .select("leader_key, name, tagline, vertical, sub_domains, tier, composite_score, profile_pic_url, welcome_video_url, raw_json, created_at, updated_at")
       .order("updated_at", { ascending: false })
       .limit(limit);
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ leaders: data ?? [] });
+
+    // Transform database fields to match LeaderSummary type
+    const leaders = (data ?? []).map((row: any) => ({
+      id: row.leader_key,
+      name: row.name ?? "Untitled Leader",
+      tagline: row.tagline,
+      vertical: row.vertical,
+      subDomains: row.sub_domains,
+      tier: row.tier,
+      compositeScore: row.composite_score,
+      profilePicUrl: row.profile_pic_url,
+      welcomeVideoUrl: row.welcome_video_url,
+      rawJson: JSON.stringify(row.raw_json),
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
+
+    return NextResponse.json({ leaders });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: msg }, { status: 500 });
