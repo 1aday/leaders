@@ -13,6 +13,7 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
+| #4039 | 6:37 PM | 🟣 | Added clearLeaderChat function to delete all chat history for a leader | ~360 |
 | #3938 | 5:19 PM | 🟣 | Chat Persistence Endpoint Implemented | ~362 |
 | #3937 | " | 🔵 | Database Persistence Layer Functions Analyzed | ~374 |
 | #3929 | 5:18 PM | 🟣 | Database Abstraction Layer Created | ~389 |

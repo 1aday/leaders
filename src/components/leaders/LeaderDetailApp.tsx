@@ -29,7 +29,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { cn, calculateCompositeScore } from "@/lib/utils";
 import { safeJsonParse } from "@/lib/safe-json";
-import { fetchLeaderById, updateLeader, deleteLeader, fetchLeaderChat, saveLeaderChat, type LeaderSummary } from "@/lib/db/leader-client";
+import { fetchLeaderById, updateLeader, deleteLeader, fetchLeaderChat, saveLeaderChat, clearLeaderChat, type LeaderSummary } from "@/lib/db/leader-client";
 
 // Helper functions
 function isPlainObject(v: unknown): v is Record<string, unknown> {
@@ -513,6 +513,7 @@ export function LeaderDetailApp({ id }: { id: string }) {
         if (data) {
           try {
             const chatData = await fetchLeaderChat(data.id);
+            justLoadedRef.current = true; // Prevent immediate save after load
             setChatMessages(chatData);
           } catch (e) {
             console.warn("Failed to load chat history:", e);
@@ -542,15 +543,34 @@ export function LeaderDetailApp({ id }: { id: string }) {
   const [chatSending, setChatSending] = React.useState(false);
   const [chatError, setChatError] = React.useState<string | null>(null);
 
+  // Track if messages were just loaded to prevent immediate save
+  const justLoadedRef = React.useRef(false);
+
   // Chat is now loaded in the main loadLeader useEffect above
 
   // Debounced save to database
   React.useEffect(() => {
     if (!leader || chatMessages.length === 0) return;
 
+    // Don't save while chat is sending (avoid saving empty placeholder messages)
+    if (chatSending) return;
+
+    // Don't save immediately after loading from database
+    if (justLoadedRef.current) {
+      justLoadedRef.current = false;
+      return;
+    }
+
     const timer = setTimeout(async () => {
       try {
-        await saveLeaderChat(leader.id, chatMessages.slice(-80));
+        // Filter out empty messages (placeholders during streaming)
+        const messagesToSave = chatMessages
+          .filter(m => m.content.trim().length > 0)
+          .slice(-80);
+
+        if (messagesToSave.length > 0) {
+          await saveLeaderChat(leader.id, messagesToSave);
+        }
       } catch (e) {
         console.warn("Failed to save chat:", e);
         // Non-blocking - chat continues to work in memory
@@ -558,7 +578,7 @@ export function LeaderDetailApp({ id }: { id: string }) {
     }, 2000); // Debounce 2 seconds
 
     return () => clearTimeout(timer);
-  }, [chatMessages, leader]);
+  }, [chatMessages, leader, chatSending]);
 
   // Intelligent auto-scroll: only scroll if user is already at bottom
   const [isUserScrolledUp, setIsUserScrolledUp] = React.useState(false);
@@ -1663,7 +1683,17 @@ export function LeaderDetailApp({ id }: { id: string }) {
                     variant="ghost"
                     size="sm"
                     className="rounded-xl text-xs"
-                    onClick={() => setChatMessages([])}
+                    onClick={async () => {
+                      if (!leader) return;
+                      try {
+                        await clearLeaderChat(leader.id);
+                        setChatMessages([]);
+                      } catch (e) {
+                        console.error("Failed to clear chat:", e);
+                        // Still clear UI even if DB clear fails
+                        setChatMessages([]);
+                      }
+                    }}
                     disabled={chatSending || chatMessages.length === 0}
                   >
                     Clear
@@ -1729,13 +1759,38 @@ export function LeaderDetailApp({ id }: { id: string }) {
                       chatMessages.map((m) => (
                         <div
                           key={m.id}
-                          className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}
+                          className={cn(
+                            "flex gap-3 items-start",
+                            m.role === "user" ? "justify-end" : "justify-start"
+                          )}
                         >
+                          {/* AI Avatar - only show for assistant messages */}
+                          {m.role === "assistant" && (
+                            <div className="flex-shrink-0 mt-1">
+                              {leader?.profilePicUrl ? (
+                                <div className="relative w-8 h-8 rounded-full overflow-hidden ring-2 ring-border/30 bg-muted">
+                                  <Image
+                                    src={leader.profilePicUrl}
+                                    alt={leader.name}
+                                    fill
+                                    className="object-cover"
+                                  />
+                                </div>
+                              ) : (
+                                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/20 to-primary/40 ring-2 ring-border/30 flex items-center justify-center">
+                                  <span className="text-xs font-semibold text-primary">
+                                    {leader?.name?.charAt(0) || "AI"}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
                           <div
                             className={cn(
                               "max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed",
-                              m.role === "user" 
-                                ? "bg-primary text-primary-foreground" 
+                              m.role === "user"
+                                ? "bg-primary text-primary-foreground"
                                 : "bg-muted text-foreground",
                             )}
                           >

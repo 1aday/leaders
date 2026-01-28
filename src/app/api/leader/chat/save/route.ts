@@ -77,10 +77,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true });
     }
 
-    // Convert chat messages to the format expected by logLeaderChat
+    // Preserve all message fields including id and createdAt for consistency
     const simplifiedMessages = body.messages.map((m) => ({
+      id: m.id,
       role: m.role,
       content: m.content,
+      createdAt: m.createdAt,
     }));
 
     await logLeaderChat({

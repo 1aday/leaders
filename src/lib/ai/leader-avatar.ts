@@ -166,14 +166,14 @@ function buildVariedPrompt(opts: {
  * for Nano Banana image generation.
  *
  * IMPORTANT: Always uses the exact Physical Description from the leader profile.
- * No randomization - avatar must match the leader's defined identity attributes.
+ * Ethnicity and gender remain consistent. Appearance varies on regeneration (lighting, pose, etc).
  */
 function buildVisualAttributesPrompt(opts: {
   physical: AnyRecord | null;
   visualStyle: AnyRecord | null;
-  isRegeneration?: boolean; // Ignored - kept for API compatibility
+  isRegeneration?: boolean;
 }): string {
-  const { physical, visualStyle } = opts;
+  const { physical, visualStyle, isRegeneration } = opts;
 
   // Extract physical attributes
   const apparentAge = pickString(physical, "apparentAge");
@@ -257,38 +257,25 @@ function buildVisualAttributesPrompt(opts: {
     parts.push(facialFeatures.toLowerCase());
   }
   
-  // Attire
-  if (typicalAttire) {
-    parts.push(`wearing ${typicalAttire.toLowerCase()}`);
-  }
-  
-  // Distinguishing features
-  if (distinguishingFeatures && distinguishingFeatures.length > 0) {
-    parts.push(distinguishingFeatures.slice(0, 3).join(", ").toLowerCase());
-  }
-  
-  // Mood/expression
-  if (moodEnergy) {
-    parts.push(`${moodEnergy.toLowerCase()} expression`);
-  } else {
-    parts.push("confident approachable expression");
-  }
-  
-  // Accent color from palette
-  if (accentColor && typicalAttire) {
-    parts.push(`subtle ${accentColor.toLowerCase()} accent`);
-  }
-  
-  // Technical specifications (always include)
-  parts.push("85mm portrait lens");
-  parts.push("soft key light with subtle rim light");
-  parts.push("clean neutral gray gradient background");
-  parts.push("head and shoulders framing");
-  parts.push("looking at camera");
-  parts.push("high detail");
-  parts.push("natural skin texture");
-  
-  return parts.join(", ");
+  // ALWAYS use varied prompt for diversity - don't include overly specific features
+  // Extract core identity attributes (ethnicity, gender, age stay consistent)
+  const coreAttributes = {
+    ethnicity: ethnicity || undefined,
+    genderPresentation: genderPresentation || undefined,
+    apparentAge: apparentAge || undefined,
+    hairColor: hairColor || "brown",
+    hairStyle: hairStyle || "styled",
+    hairLength: hairLength || "medium",
+    eyeColor: eyeColor || "brown",
+    facialFeatures: facialFeatures || "friendly features",
+    expression: moodEnergy ? `${moodEnergy.toLowerCase()} expression` : "confident approachable expression",
+    attire: typicalAttire || "professional attire",
+    buildBodyType: buildBodyType || undefined,
+  };
+
+  // Use varied prompt with randomized photography, lighting, framing, background
+  // This ensures each generation looks different while maintaining identity
+  return buildVariedPrompt(coreAttributes);
 }
 
 /**

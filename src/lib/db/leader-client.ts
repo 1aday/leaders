@@ -178,6 +178,21 @@ export async function saveLeaderChat(leaderKey: string, messages: ChatMsg[]): Pr
   }
 }
 
+/**
+ * Clear all chat history for a leader.
+ * @param leaderKey - Leader key
+ */
+export async function clearLeaderChat(leaderKey: string): Promise<void> {
+  const res = await fetch(`/api/leader/chat/${encodeURIComponent(leaderKey)}`, {
+    method: 'DELETE',
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`Failed to clear chat: ${res.status} ${errorText}`);
+  }
+}
+
 // =============================================================================
 // Utility Functions
 // =============================================================================
