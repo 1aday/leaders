@@ -625,7 +625,7 @@ export function LeaderDetailApp({ id }: { id: string }) {
   const [loadingChatInstructions, setLoadingChatInstructions] = React.useState(false);
 
   // Show/hide scoring reasoning breakdown
-  const [showScoringReasoning, setShowScoringReasoning] = React.useState(false);
+  const [showScoringReasoning, setShowScoringReasoning] = React.useState(true);
 
   // Chat scroll state - auto-scroll to bottom on new messages
   const chatScrollRef = React.useRef<HTMLDivElement>(null);
