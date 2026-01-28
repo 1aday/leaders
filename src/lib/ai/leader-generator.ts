@@ -1553,6 +1553,33 @@ Return the complete JSON matching the schema.`;
       }
     }
 
+    // CRITICAL: Ensure scoringReasoning exists
+    // OpenAI json_object mode doesn't strictly enforce nested required fields
+    if (isPlainObject((leader as AnyRecord).metadata)) {
+      const metadata = (leader as AnyRecord).metadata as AnyRecord;
+      if (isPlainObject(metadata.leadershipScores)) {
+        const scores = metadata.leadershipScores as AnyRecord;
+
+        // If scoringReasoning is missing, generate fallback reasoning
+        if (!isPlainObject(scores.scoringReasoning)) {
+          const char = typeof scores.character === "number" ? scores.character : 50;
+          const comp = typeof scores.competence === "number" ? scores.competence : 50;
+          const imp = typeof scores.impact === "number" ? scores.impact : 50;
+          const jobs = typeof scores.jobsRuleMultiplier === "number" ? scores.jobsRuleMultiplier : 1.0;
+          const name = typeof core?.name === "string" ? core.name : "this leader";
+
+          scores.scoringReasoning = {
+            character: `Character score of ${char} reflects the demonstrated integrity, beneficence, and accountability in ${name}'s approach. The score is calibrated relative to Jesus Christ (100), who represents perfect integrity and ethical conduct.`,
+            competence: `Competence score of ${comp} reflects the expertise, communication ability, and vision demonstrated. This is measured against Jesus Christ (100) as the baseline for perfect wisdom and communication.`,
+            impact: `Impact score of ${imp} reflects the value created and trustworthiness established. Measured against Jesus Christ's perfect 100 (2.4B followers, 2000+ years of influence).`,
+            jobsRule: `Jobs Rule multiplier of ${jobs.toFixed(2)} reflects the ethical approach and conduct. ${jobs >= 0.95 ? "Very high ethical standards with minimal concerns." : jobs >= 0.85 ? "Strong ethical approach with minor imperfections." : jobs >= 0.70 ? "Notable ethical considerations that affect overall leadership credibility." : "Significant ethical concerns that impact the final score."}`
+          };
+
+          console.log("[Leader Gen] Added fallback scoringReasoning (OpenAI didn't provide it)");
+        }
+      }
+    }
+
     // CRITICAL: Enforce Jesus Christ baseline scores (100/100/100)
     // The AI should score Jesus as 100, but we enforce it here for reliability
     const leaderName = (typeof core?.name === "string" ? core.name : "").toLowerCase();

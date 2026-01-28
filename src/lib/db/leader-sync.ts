@@ -61,8 +61,26 @@ function mergeLeader(local: LeaderSummary, remote: LeaderSummary): LeaderSummary
     if (!newerHasScores && olderHasScores) {
       if (!newerParsed.metadata) newerParsed.metadata = {};
       newerParsed.metadata.leadershipScores = olderHasScores;
-      finalRawJson = JSON.stringify(newerParsed, null, 2);
     }
+
+    // Ensure scoringReasoning exists (generate fallback if missing)
+    const scores = newerParsed?.metadata?.leadershipScores;
+    if (scores && typeof scores === "object" && !scores.scoringReasoning) {
+      const char = typeof scores.character === "number" ? scores.character : 50;
+      const comp = typeof scores.competence === "number" ? scores.competence : 50;
+      const imp = typeof scores.impact === "number" ? scores.impact : 50;
+      const jobs = typeof scores.jobsRuleMultiplier === "number" ? scores.jobsRuleMultiplier : 1.0;
+      const name = newerParsed?.coreIdentity?.name || "this leader";
+
+      scores.scoringReasoning = {
+        character: `Character score of ${char} reflects the demonstrated integrity, beneficence, and accountability in ${name}'s approach. The score is calibrated relative to Jesus Christ (100), who represents perfect integrity and ethical conduct.`,
+        competence: `Competence score of ${comp} reflects the expertise, communication ability, and vision demonstrated. This is measured against Jesus Christ (100) as the baseline for perfect wisdom and communication.`,
+        impact: `Impact score of ${imp} reflects the value created and trustworthiness established. Measured against Jesus Christ's perfect 100 (2.4B followers, 2000+ years of influence).`,
+        jobsRule: `Jobs Rule multiplier of ${jobs.toFixed(2)} reflects the ethical approach and conduct. ${jobs >= 0.95 ? "Very high ethical standards with minimal concerns." : jobs >= 0.85 ? "Strong ethical approach with minor imperfections." : jobs >= 0.70 ? "Notable ethical considerations that affect overall leadership credibility." : "Significant ethical concerns that impact the final score."}`
+      };
+    }
+
+    finalRawJson = JSON.stringify(newerParsed, null, 2);
   } catch {
     // If JSON parsing fails, just use the newer rawJson as-is
   }
