@@ -169,8 +169,43 @@ export function NewLeaderApp() {
   const [generatingMode, setGeneratingMode] = React.useState<"random" | "custom" | null>(null);
   const [genError, setGenError] = React.useState<string | null>(null);
   const [genProgress, setGenProgress] = React.useState(0);
+  const [maxGenProgress, setMaxGenProgress] = React.useState(0);
+  const [genStage, setGenStage] = React.useState<"waiting" | "streaming" | null>(null);
+  const [genStartTime, setGenStartTime] = React.useState<number | null>(null);
+  const [elapsedTime, setElapsedTime] = React.useState(0);
   const [previewTab, setPreviewTab] = React.useState<"overview" | "json">("overview");
   const [editingJson, setEditingJson] = React.useState(false);
+
+  // Smooth interpolated progress (animates towards genProgress)
+  const [displayProgress, setDisplayProgress] = React.useState(0);
+
+  React.useEffect(() => {
+    if (genProgress === displayProgress) return;
+
+    // Smooth interpolation - move 10% of the distance every 50ms
+    const interval = setInterval(() => {
+      setDisplayProgress((current) => {
+        const diff = genProgress - current;
+        if (Math.abs(diff) < 0.5) {
+          return genProgress;
+        }
+        return current + diff * 0.15;
+      });
+    }, 50);
+
+    return () => clearInterval(interval);
+  }, [genProgress, displayProgress]);
+
+  // Update elapsed time ticker when generating
+  React.useEffect(() => {
+    if (!generating || !genStartTime) return;
+
+    const interval = setInterval(() => {
+      setElapsedTime((Date.now() - genStartTime) / 1000);
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, [generating, genStartTime]);
 
   // Parse JSON with debounce
   React.useEffect(() => {
@@ -224,6 +259,10 @@ export function NewLeaderApp() {
   const handleGenerate = React.useCallback(async (forceRandom = false) => {
     setGenError(null);
     setGenProgress(0);
+    setDisplayProgress(0);
+    setMaxGenProgress(0);
+    setGenStage("waiting");
+    setGenStartTime(Date.now());
     const name = forceRandom ? "" : genName.trim();
     const description = forceRandom ? "" : genDescription.trim();
 
@@ -273,8 +312,19 @@ export function NewLeaderApp() {
 
                 if (json.type === "progress") {
                   const percentage = Math.min(99, Math.max(0, Math.round(json.percentage || 0)));
-                  console.log(`[Progress] ${percentage}%`);
-                  setGenProgress(percentage);
+
+                  // Only move progress forward (never backwards) for smooth UX
+                  setMaxGenProgress((prev) => {
+                    const newMax = Math.max(prev, percentage);
+                    setGenProgress(newMax);
+                    console.log(`[Progress] ${newMax}%`);
+                    return newMax;
+                  });
+
+                  // Transition to streaming stage once we get real progress
+                  if (percentage > 1) {
+                    setGenStage("streaming");
+                  }
                 } else if (json.type === "complete") {
                   const leader = json.leader;
                   if (!leader) throw new Error("API returned no leader JSON");
@@ -300,6 +350,7 @@ export function NewLeaderApp() {
       const msg = e instanceof Error ? e.message : "Unknown error";
       setGenError(msg);
       setGenProgress(0);
+      setGenStage(null);
     } finally {
       setGenerating(false);
       setGeneratingMode(null);
@@ -541,7 +592,7 @@ export function NewLeaderApp() {
                           {generatingMode === "random" ? (
                             <>
                               <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground/30 border-t-primary-foreground" />
-                              {genProgress > 0 ? `${genProgress}%` : "Generating..."}
+                              {Math.round(displayProgress) > 0 ? `${Math.round(displayProgress)}%` : "Generating..."}
                             </>
                           ) : (
                             <>
@@ -552,14 +603,54 @@ export function NewLeaderApp() {
                         </Button>
                       </div>
                       {generatingMode === "random" && (
-                        <div className="mt-3 space-y-2">
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-muted-foreground">
-                              {genProgress <= 1 ? "Waiting for OpenAI..." : "Generating..."}
-                            </span>
-                            <span className="font-medium tabular-nums text-foreground">{genProgress}%</span>
-                          </div>
-                          <Progress value={genProgress} className="h-2" />
+                        <div className="mt-3 space-y-3">
+                          {genStage === "waiting" ? (
+                            /* Stage 1: Waiting for first token */
+                            <div className="space-y-3 animate-in fade-in duration-300">
+                              <div className="flex items-center justify-between text-sm">
+                                <span className="text-muted-foreground animate-pulse">
+                                  Connecting to OpenAI...
+                                </span>
+                                <span className="text-xs text-muted-foreground/60">
+                                  {elapsedTime.toFixed(1)}s
+                                </span>
+                              </div>
+                              {/* Shimmer effect progress bar */}
+                              <div className="relative h-2 overflow-hidden rounded-full bg-muted/30">
+                                <div className="absolute inset-0 shimmer" />
+                              </div>
+                              <p className="text-xs text-muted-foreground/70">
+                                Initializing AI model (typically ~0.7s)
+                              </p>
+                            </div>
+                          ) : (
+                            /* Stage 2: Streaming with real progress */
+                            <div className="space-y-3 animate-in fade-in slide-in-from-top-2 duration-500">
+                              <div className="flex items-center justify-between text-sm">
+                                <div className="flex items-center gap-2">
+                                  <div className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+                                  <span className="text-foreground font-medium">
+                                    Generating Leader Bible...
+                                  </span>
+                                </div>
+                                <span className="font-semibold tabular-nums text-primary">
+                                  {Math.round(displayProgress)}%
+                                </span>
+                              </div>
+                              <Progress
+                                value={displayProgress}
+                                className="h-2.5"
+                              />
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="text-muted-foreground">
+                                  Streaming JSON schema...
+                                </span>
+                                <span className="text-muted-foreground/70">
+                                  {elapsedTime.toFixed(1)}s elapsed
+                                </span>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -617,7 +708,7 @@ export function NewLeaderApp() {
                         {generatingMode === "custom" ? (
                           <>
                             <div className="h-4 w-4 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground" />
-                            {genProgress > 0 ? `${genProgress}%` : "Generating..."}
+                            {Math.round(displayProgress) > 0 ? `${Math.round(displayProgress)}%` : "Generating..."}
                           </>
                         ) : (
                           <>
@@ -628,14 +719,54 @@ export function NewLeaderApp() {
                       </Button>
                     </div>
                     {generatingMode === "custom" && (
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-muted-foreground">
-                            {genProgress <= 1 ? "Waiting for OpenAI..." : "Generating Leader Bible..."}
-                          </span>
-                          <span className="font-medium tabular-nums text-foreground">{genProgress}%</span>
-                        </div>
-                        <Progress value={genProgress} className="h-2" />
+                      <div className="rounded-xl border border-border/60 bg-muted/20 p-4">
+                        {genStage === "waiting" ? (
+                          /* Stage 1: Waiting for first token */
+                          <div className="space-y-3 animate-in fade-in duration-300">
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="text-muted-foreground animate-pulse">
+                                Connecting to OpenAI...
+                              </span>
+                              <span className="text-xs text-muted-foreground/60">
+                                {elapsedTime.toFixed(1)}s
+                              </span>
+                            </div>
+                            {/* Shimmer effect progress bar */}
+                            <div className="relative h-2 overflow-hidden rounded-full bg-muted/30">
+                              <div className="absolute inset-0 shimmer" />
+                            </div>
+                            <p className="text-xs text-muted-foreground/70">
+                              Initializing AI model (typically ~0.7s)
+                            </p>
+                          </div>
+                        ) : (
+                          /* Stage 2: Streaming with real progress */
+                          <div className="space-y-3 animate-in fade-in slide-in-from-top-2 duration-500">
+                            <div className="flex items-center justify-between text-sm">
+                              <div className="flex items-center gap-2">
+                                <div className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+                                <span className="text-foreground font-medium">
+                                  Generating Leader Bible...
+                                </span>
+                              </div>
+                              <span className="font-semibold tabular-nums text-primary">
+                                {Math.round(displayProgress)}%
+                              </span>
+                            </div>
+                            <Progress
+                              value={displayProgress}
+                              className="h-2.5"
+                            />
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="text-muted-foreground">
+                                Streaming JSON schema...
+                              </span>
+                              <span className="text-muted-foreground/70">
+                                {elapsedTime.toFixed(1)}s elapsed
+                              </span>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                     {genError && <p className="text-sm text-destructive">{genError}</p>}
