@@ -48,6 +48,25 @@ function mergeLeader(local: LeaderSummary, remote: LeaderSummary): LeaderSummary
   const newer = rt >= lt ? remote : local;
   const older = rt >= lt ? local : remote;
 
+  // Merge leadership scores: if newer version lacks scores but older has them, preserve scores
+  let finalRawJson = newer.rawJson || older.rawJson;
+  try {
+    const newerParsed = JSON.parse(newer.rawJson || "{}");
+    const olderParsed = JSON.parse(older.rawJson || "{}");
+
+    const newerHasScores = newerParsed?.metadata?.leadershipScores;
+    const olderHasScores = olderParsed?.metadata?.leadershipScores;
+
+    // If newer lacks scores but older has them, inject scores into newer
+    if (!newerHasScores && olderHasScores) {
+      if (!newerParsed.metadata) newerParsed.metadata = {};
+      newerParsed.metadata.leadershipScores = olderHasScores;
+      finalRawJson = JSON.stringify(newerParsed, null, 2);
+    }
+  } catch {
+    // If JSON parsing fails, just use the newer rawJson as-is
+  }
+
   return {
     ...newer,
     profilePicUrl: newer.profilePicUrl ?? older.profilePicUrl,
@@ -57,7 +76,7 @@ function mergeLeader(local: LeaderSummary, remote: LeaderSummary): LeaderSummary
     subDomains: newer.subDomains ?? older.subDomains,
     tier: newer.tier ?? older.tier,
     compositeScore: typeof newer.compositeScore === "number" ? newer.compositeScore : older.compositeScore,
-    rawJson: newer.rawJson || older.rawJson,
+    rawJson: finalRawJson,
     createdAt: newer.createdAt || older.createdAt,
     updatedAt: newer.updatedAt || older.updatedAt,
   };
