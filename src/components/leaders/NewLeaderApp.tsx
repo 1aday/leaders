@@ -299,10 +299,18 @@ export function NewLeaderApp() {
     // Debounce: wait 800ms after user stops typing
     const debounceTimer = setTimeout(() => {
       console.log('[Images] Starting fetch for:', genName);
-      setImageSelectionStage("fetching");
-      setReferenceImages([]);
-      setSelectedImageIndex(null);
-      setSelectedImageUrl(null);
+
+      // Only reset if user hasn't selected an image yet
+      // Once selected, keep it unless toggle is disabled
+      if (imageSelectionStage !== "selected") {
+        setImageSelectionStage("fetching");
+        setReferenceImages([]);
+        setSelectedImageIndex(null);
+        setSelectedImageUrl(null);
+      } else {
+        console.log('[Images] Keeping existing selection, skipping new fetch');
+        return; // Don't fetch new images if already selected
+      }
 
       fetch("/api/leader/fetch-images", {
         method: "POST",
@@ -1692,7 +1700,7 @@ export function NewLeaderApp() {
             </div>
 
             <Tabs value={previewTab} onValueChange={(v) => setPreviewTab(v as "overview" | "json" | "research")} className="mx-auto max-w-6xl px-4 sm:px-0">
-              <div className="flex items-center justify-center mb-2">
+              <div className="flex items-center justify-center mb-0">
                 <TabsList className="rounded-full w-full sm:w-auto grid grid-cols-2 sm:flex gap-1 p-1">
                   <TabsTrigger value="overview" className="rounded-full text-xs sm:text-sm px-3 sm:px-4">
                     Overview
@@ -1708,7 +1716,7 @@ export function NewLeaderApp() {
                 </TabsList>
               </div>
 
-              <TabsContent value="overview" className="mt-6">
+              <TabsContent value="overview" className="mt-0">
                 {/* Preview Card */}
                 <div className="overflow-hidden rounded-3xl border border-border/60 bg-card shadow-xl shadow-primary/5">
                   {/* Hero section */}
@@ -1716,7 +1724,7 @@ export function NewLeaderApp() {
                     <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                          <h2 className="font-display text-3xl font-medium tracking-tight text-foreground sm:text-4xl lg:text-5xl">
+                          <h2 className="font-display text-3xl font-medium tracking-tight text-foreground sm:text-4xl lg:text-5xl break-words">
                             {identity.name}
                           </h2>
                           {identity.tier && (
@@ -1824,10 +1832,10 @@ export function NewLeaderApp() {
 
                     return (
                       <div className="border-b border-border/40 px-4 py-6 sm:px-8 sm:py-8">
-                        <div className="mb-5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                        <div className="mb-4 text-xs font-medium uppercase tracking-wider text-muted-foreground">
                           Leadership Scores
                         </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 mb-6">
+                        <div className="space-y-3 sm:space-y-0 sm:grid sm:grid-cols-3 sm:gap-4 mb-5">
                           {typeof scores.character === "number" && (
                             <div className="rounded-xl border border-border/60 bg-gradient-to-br from-blue-500/5 to-transparent p-4 sm:p-5">
                               <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">Character</div>
@@ -1908,18 +1916,18 @@ export function NewLeaderApp() {
                           {audience.description && (
                             <p className="text-sm sm:text-base text-foreground leading-relaxed">{audience.description}</p>
                           )}
-                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                          <div className="space-y-3 sm:space-y-0 sm:grid sm:grid-cols-2 sm:gap-3">
                             {audience.demographics && (
-                              <div className="rounded-lg bg-muted/30 p-4">
+                              <div className="rounded-lg bg-muted/30 p-3.5">
                                 <div className="text-xs font-semibold text-muted-foreground mb-2">Demographics</div>
                                 <div className="space-y-1 text-xs sm:text-sm text-foreground">
-                                  {audience.demographics.ageRange && <div>Age: {audience.demographics.ageRange}</div>}
-                                  {audience.demographics.geography && <div>Location: {audience.demographics.geography}</div>}
+                                  {audience.demographics.ageRange && <div><span className="text-muted-foreground">Age:</span> {audience.demographics.ageRange}</div>}
+                                  {audience.demographics.geography && <div><span className="text-muted-foreground">Location:</span> {audience.demographics.geography}</div>}
                                 </div>
                               </div>
                             )}
                             {audience.knowledgeLevel && (
-                              <div className="rounded-lg bg-muted/30 p-4">
+                              <div className="rounded-lg bg-muted/30 p-3.5">
                                 <div className="text-xs font-semibold text-muted-foreground mb-2">Knowledge Level</div>
                                 <div className="text-xs sm:text-sm text-foreground font-medium">{audience.knowledgeLevel}</div>
                               </div>
@@ -2033,23 +2041,29 @@ export function NewLeaderApp() {
                           {comm.summary && (
                             <p className="text-sm sm:text-base text-foreground leading-relaxed">{comm.summary}</p>
                           )}
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="space-y-3 sm:space-y-0 sm:grid sm:grid-cols-2 sm:gap-3">
                             {Array.isArray(comm.doSay) && comm.doSay.length > 0 && (
-                              <div className="rounded-lg bg-green-500/5 border border-green-500/20 p-4">
-                                <div className="text-xs font-semibold text-green-600 dark:text-green-400 mb-3">✓ Do Say</div>
-                                <ul className="space-y-2">
+                              <div className="rounded-lg bg-green-500/5 border border-green-500/20 p-3.5">
+                                <div className="text-xs font-semibold text-green-600 dark:text-green-400 mb-2.5">✓ Do Say</div>
+                                <ul className="space-y-1.5">
                                   {comm.doSay.slice(0, 5).map((phrase: string, i: number) => (
-                                    <li key={i} className="text-xs sm:text-sm text-foreground leading-relaxed">{phrase}</li>
+                                    <li key={i} className="text-xs sm:text-sm text-foreground leading-relaxed flex items-start gap-1.5">
+                                      <span className="text-green-600 dark:text-green-400 mt-0.5 shrink-0">•</span>
+                                      <span className="flex-1">{phrase}</span>
+                                    </li>
                                   ))}
                                 </ul>
                               </div>
                             )}
                             {Array.isArray(comm.dontSay) && comm.dontSay.length > 0 && (
-                              <div className="rounded-lg bg-red-500/5 border border-red-500/20 p-4">
-                                <div className="text-xs font-semibold text-red-600 dark:text-red-400 mb-3">✗ Don't Say</div>
-                                <ul className="space-y-2">
+                              <div className="rounded-lg bg-red-500/5 border border-red-500/20 p-3.5">
+                                <div className="text-xs font-semibold text-red-600 dark:text-red-400 mb-2.5">✗ Don't Say</div>
+                                <ul className="space-y-1.5">
                                   {comm.dontSay.slice(0, 5).map((phrase: string, i: number) => (
-                                    <li key={i} className="text-xs sm:text-sm text-foreground leading-relaxed">{phrase}</li>
+                                    <li key={i} className="text-xs sm:text-sm text-foreground leading-relaxed flex items-start gap-1.5">
+                                      <span className="text-red-600 dark:text-red-400 mt-0.5 shrink-0">•</span>
+                                      <span className="flex-1">{phrase}</span>
+                                    </li>
                                   ))}
                                 </ul>
                               </div>

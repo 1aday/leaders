@@ -282,4 +282,16 @@
     background-size: 200% 100%;
     animation: shimmer 2s infinite;
   }
+
+  /* Ensure text wraps properly on all screens */
+  h1, h2, h3, h4, h5, h6, p, li, span, div {
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    word-break: break-word;
+  }
+
+  /* Fix TabsContent spacing */
+  [data-radix-scroll-area-viewport] > div {
+    padding-top: 0 !important;
+  }
 }
