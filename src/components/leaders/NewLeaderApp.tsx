@@ -167,6 +167,18 @@ export function NewLeaderApp() {
   const [genName, setGenName] = React.useState("");
   const [genDescription, setGenDescription] = React.useState("");
   const [webSearchEnabled, setWebSearchEnabled] = React.useState(false);
+  const [findPhotosEnabled, setFindPhotosEnabled] = React.useState(false);
+  const [referenceImages, setReferenceImages] = React.useState<Array<{
+    url: string;
+    thumbnail: string;
+    title: string;
+    source: string;
+  }>>([]);
+  const [selectedImageIndex, setSelectedImageIndex] = React.useState<number | null>(null);
+  const [selectedImageUrl, setSelectedImageUrl] = React.useState<string | null>(null);
+  const [imageSelectionStage, setImageSelectionStage] = React.useState<
+    "idle" | "fetching" | "selecting" | "selected"
+  >("idle");
   const [generating, setGenerating] = React.useState(false);
   const [generatingMode, setGeneratingMode] = React.useState<"random" | "custom" | null>(null);
   const [genError, setGenError] = React.useState<string | null>(null);
@@ -268,6 +280,83 @@ export function NewLeaderApp() {
     if (file) handleFile(file);
   }, [handleFile]);
 
+  // Fetch images immediately when toggle is enabled
+  React.useEffect(() => {
+    if (findPhotosEnabled && genName.trim().length > 0 && !generating) {
+      console.log('[Images] Fetching images for:', genName);
+      setImageSelectionStage("fetching");
+      setReferenceImages([]);
+      setSelectedImageIndex(null);
+
+      fetch("/api/leader/fetch-images", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: genName.trim(),
+          description: genDescription.trim() || undefined,
+        }),
+      })
+        .then(res => res.json())
+        .then(data => {
+          console.log('[Images] Received:', data.images?.length, 'images');
+          if (data.images && data.images.length > 0) {
+            setReferenceImages(data.images);
+            setImageSelectionStage("selecting");
+          } else {
+            setImageSelectionStage("idle");
+          }
+        })
+        .catch(error => {
+          console.error('[Images] Failed to fetch:', error);
+          setImageSelectionStage("idle");
+        });
+    } else if (!findPhotosEnabled) {
+      // Clear images when toggle is disabled
+      setReferenceImages([]);
+      setSelectedImageIndex(null);
+      setImageSelectionStage("idle");
+    }
+  }, [findPhotosEnabled, genName, genDescription, generating]);
+
+  // Helper function to send image selection to backend
+  const continueGenerationWithImage = React.useCallback(async (imageUrl: string) => {
+    try {
+      await fetch("/api/leader/select-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: String(genStartTime),
+          selectedImageUrl: imageUrl,
+        }),
+      });
+      setImageSelectionStage("selected");
+      setSelectedImageUrl(imageUrl); // Store for display later
+      console.log("[UI] Image selection sent:", imageUrl);
+    } catch (e) {
+      console.error("Failed to send image selection:", e);
+      setGenError("Failed to send image selection");
+    }
+  }, [genStartTime]);
+
+  // Helper function to skip image selection
+  const continueGenerationWithoutImage = React.useCallback(async () => {
+    try {
+      await fetch("/api/leader/select-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: String(genStartTime),
+          selectedImageUrl: null,
+        }),
+      });
+      setImageSelectionStage("idle");
+      setReferenceImages([]);
+      setSelectedImageIndex(null);
+      console.log("[UI] Image selection skipped");
+    } catch (e) {
+      console.error("Failed to skip image selection:", e);
+    }
+  }, [genStartTime]);
 
   const handleGenerate = React.useCallback(async (forceRandom = false) => {
     console.log('[GENERATE] ===== BUTTON CLICKED =====');
@@ -282,6 +371,10 @@ export function NewLeaderApp() {
     setGenStage("waiting");
     setResearchStage(null);
     setResearchResults(null);
+    setSelectedImageUrl(null); // Reset selected image
+    setReferenceImages([]); // Reset reference images
+    setSelectedImageIndex(null); // Reset selection
+    setImageSelectionStage("idle"); // Reset stage
     setGenStartTime(Date.now());
     const name = forceRandom ? "" : genName.trim();
     const description = forceRandom ? "" : genDescription.trim();
@@ -327,7 +420,12 @@ export function NewLeaderApp() {
       const res = await fetch("/api/leader/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, description, webSearch: useWebSearch }),
+        body: JSON.stringify({
+          name,
+          description,
+          webSearch: useWebSearch,
+          findReferencePhotos: findPhotosEnabled && genName.trim().length > 0,
+        }),
       });
 
       console.log('[GENERATE] Fetch completed, status:', res.status);
@@ -389,6 +487,12 @@ export function NewLeaderApp() {
                   expertise?: string[];
                   sources?: Array<{ title: string; url: string }>;
                   rawSummary?: string;
+                  images?: Array<{
+                    url: string;
+                    thumbnail: string;
+                    title: string;
+                    source: string;
+                  }>;
                 };
 
                 console.log('[SSE] Message type:', json.type);
@@ -505,6 +609,20 @@ export function NewLeaderApp() {
                   // Research failed, continue anyway
                   setResearchStage(null);
                   setGenStage("streaming");
+                } else if (json.type === "images_fetching") {
+                  console.log('[UI] Images fetching started');
+                  setImageSelectionStage("fetching");
+                } else if (json.type === "images_ready") {
+                  console.log('[UI] Images ready:', json.images?.length);
+                  if (json.images && json.images.length > 0) {
+                    setReferenceImages(json.images);
+                    setImageSelectionStage("selecting");
+                  } else {
+                    setImageSelectionStage("idle");
+                  }
+                } else if (json.type === "images_failed") {
+                  console.log('[UI] Image search failed');
+                  setImageSelectionStage("idle");
                 } else if (json.type === "progress") {
                   const percentage = Math.min(99, Math.max(0, Math.round(json.percentage || 0)));
 
@@ -1034,6 +1152,146 @@ export function NewLeaderApp() {
                       </div>
                     </div>
 
+                    {/* Reference Photos Toggle */}
+                    <div
+                      className={cn(
+                        "rounded-xl border border-border/60 bg-card/50 p-3 transition-colors",
+                        !genName.trim() || generating
+                          ? "cursor-not-allowed opacity-60"
+                          : "cursor-pointer hover:bg-card/80"
+                      )}
+                      onClick={() => {
+                        if (!generating && genName.trim()) {
+                          setFindPhotosEnabled(!findPhotosEnabled);
+                        }
+                      }}
+                    >
+                      <div className="flex items-start gap-3">
+                        <input
+                          type="checkbox"
+                          id="findPhotosToggle"
+                          checked={findPhotosEnabled}
+                          onChange={(e) => setFindPhotosEnabled(e.target.checked)}
+                          disabled={generating || !genName.trim()}
+                          className="mt-0.5 h-4 w-4 rounded border-border bg-background text-primary focus:ring-2 focus:ring-primary/20 pointer-events-none"
+                          tabIndex={-1}
+                        />
+                        <div className="flex-1">
+                          <div
+                            className={cn(
+                              "block text-sm font-medium",
+                              !genName.trim()
+                                ? "text-muted-foreground/50"
+                                : "text-foreground"
+                            )}
+                          >
+                            📸 Find reference photos
+                          </div>
+                          <p
+                            className={cn(
+                              "mt-1 text-xs",
+                              !genName.trim()
+                                ? "text-muted-foreground/40"
+                                : "text-muted-foreground"
+                            )}
+                          >
+                            Search for photos to use as visual reference for avatar generation. You'll select one before generation continues.
+                            {!genName.trim() && (
+                              <span className="block mt-1 text-amber-600 dark:text-amber-400 font-medium">
+                                ⚠️ Requires a leader name to enable
+                              </span>
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Image Selection Gallery - Appears when images are ready */}
+                    {imageSelectionStage === "selecting" && referenceImages.length > 0 && (
+                      <div className="animate-in fade-in slide-in-from-top-2 duration-300 rounded-xl border border-purple-500/30 bg-gradient-to-br from-purple-500/5 to-transparent p-4">
+                        <div className="mb-3 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-purple-500/10">
+                              <span className="text-sm">📸</span>
+                            </div>
+                            <div>
+                              <div className="text-sm font-medium text-foreground">
+                                Select Reference Photo
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                Found {referenceImages.length} images • Scroll to see more
+                              </div>
+                            </div>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => void continueGenerationWithoutImage()}
+                            className="h-7 gap-1.5 rounded-full text-xs"
+                          >
+                            <X className="h-3 w-3" />
+                            Skip
+                          </Button>
+                        </div>
+
+                        {/* Scrollable image grid */}
+                        <div className="relative -mx-1 overflow-x-auto pb-2">
+                          <div className="flex gap-2 px-1">
+                            {referenceImages.map((img, i) => (
+                              <button
+                                key={i}
+                                onClick={() => {
+                                  setSelectedImageIndex(i);
+                                  void continueGenerationWithImage(img.url);
+                                }}
+                                className={cn(
+                                  "relative flex-shrink-0 overflow-hidden rounded-lg border-2 transition-all duration-200",
+                                  selectedImageIndex === i
+                                    ? "border-purple-500 ring-4 ring-purple-500/20 scale-105"
+                                    : "border-border hover:border-purple-500/50 hover:scale-102"
+                                )}
+                                style={{ width: "120px", height: "120px" }}
+                              >
+                                <img
+                                  src={img.thumbnail}
+                                  alt={img.title}
+                                  className="h-full w-full object-cover"
+                                />
+                                {selectedImageIndex === i && (
+                                  <div className="absolute inset-0 flex items-center justify-center bg-purple-500/20">
+                                    <div className="rounded-full bg-purple-500 p-1.5">
+                                      <Check className="h-4 w-4 text-white" />
+                                    </div>
+                                  </div>
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {selectedImageIndex !== null && (
+                          <div className="mt-3 flex items-center gap-2 rounded-lg bg-purple-500/10 px-3 py-2">
+                            <Check className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                            <span className="text-xs text-purple-700 dark:text-purple-300">
+                              Image selected! Generation will continue automatically...
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Image fetching indicator */}
+                    {imageSelectionStage === "fetching" && (
+                      <div className="animate-in fade-in duration-300 rounded-xl border border-border/60 bg-muted/20 p-4">
+                        <div className="flex items-center gap-3">
+                          <div className="h-2 w-2 rounded-full bg-purple-500 animate-pulse" />
+                          <span className="text-sm text-muted-foreground">
+                            Searching for reference photos...
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
                     <textarea
                       value={genDescription}
                       onChange={(e) => setGenDescription(e.target.value)}
@@ -1313,6 +1571,11 @@ export function NewLeaderApp() {
                       🔍 Research
                     </TabsTrigger>
                   )}
+                  {selectedImageUrl && (
+                    <TabsTrigger value="reference" className="rounded-full">
+                      📸 Reference Image
+                    </TabsTrigger>
+                  )}
                 </TabsList>
               </div>
 
@@ -1349,6 +1612,11 @@ export function NewLeaderApp() {
                           {identity.vertical && (
                             <span className="rounded-full bg-muted px-3 py-1 text-sm text-muted-foreground">
                               {identity.vertical}
+                            </span>
+                          )}
+                          {selectedImageUrl && (
+                            <span className="flex items-center gap-1.5 rounded-full bg-purple-500/10 px-3 py-1 text-sm text-purple-700 dark:text-purple-300">
+                              📸 Reference Enhanced
                             </span>
                           )}
                         </div>
@@ -1395,6 +1663,16 @@ export function NewLeaderApp() {
                           </span>{" "}
                           characters
                         </span>
+                        {researchResults && (
+                          <span className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
+                            <span>🌐</span> Web researched
+                          </span>
+                        )}
+                        {selectedImageUrl && (
+                          <span className="flex items-center gap-1 text-xs text-purple-600 dark:text-purple-400">
+                            <span>📸</span> Image enhanced
+                          </span>
+                        )}
                       </div>
 
                       <div className="flex items-center gap-2">
@@ -1615,6 +1893,52 @@ export function NewLeaderApp() {
                           </ul>
                         </div>
                       )}
+                    </div>
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="reference" className="mt-6">
+                {selectedImageUrl && (
+                  <div className="overflow-hidden rounded-3xl border border-border/60 bg-card">
+                    <div className="border-b border-border/40 bg-gradient-to-br from-purple-500/[0.06] via-transparent to-purple-600/[0.04] px-5 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-500/10">
+                          <span className="text-xl">📸</span>
+                        </div>
+                        <div>
+                          <h3 className="font-medium text-foreground">Reference Photo Used</h3>
+                          <p className="text-xs text-muted-foreground">
+                            This photo was used as visual reference for avatar generation
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="p-6">
+                      <div className="flex justify-center">
+                        <div className="relative overflow-hidden rounded-2xl border-2 border-border/60 shadow-lg">
+                          <img
+                            src={selectedImageUrl}
+                            alt="Selected reference"
+                            className="max-h-[500px] w-auto object-contain"
+                          />
+                        </div>
+                      </div>
+                      <div className="mt-6 rounded-xl bg-muted/30 p-4">
+                        <div className="flex items-start gap-3">
+                          <div className="mt-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-purple-500/10">
+                            <Check className="h-3 w-3 text-purple-600 dark:text-purple-400" />
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-foreground">
+                              Enhanced with reference image
+                            </p>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              The AI avatar was generated using this photo as visual reference to enhance similarity and realism. The prompt was augmented with "similar appearance and style to reference photo" to guide the image generation model.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 )}

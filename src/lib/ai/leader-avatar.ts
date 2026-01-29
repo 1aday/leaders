@@ -345,6 +345,7 @@ export async function generateAvatarPromptWithOpenAI(opts: {
   leaderJson: unknown;
   leaderId?: string;
   isRegeneration?: boolean;
+  referenceImageUrl?: string;
 }): Promise<LeaderAvatarPromptResult> {
   const root = isPlainObject(opts.leaderJson) ? opts.leaderJson : null;
   const core = root && isPlainObject(root.coreIdentity) ? (root.coreIdentity as AnyRecord) : null;
@@ -374,6 +375,11 @@ export async function generateAvatarPromptWithOpenAI(opts: {
     // For fictional/non-famous leaders, build detailed prompt from visual attributes
     // Pass isRegeneration flag to add variety when regenerating
     prompt = buildVisualAttributesPrompt({ physical, visualStyle, isRegeneration: opts.isRegeneration });
+  }
+
+  // If reference image provided, enhance prompt with visual similarity instruction
+  if (opts.referenceImageUrl) {
+    prompt = `${prompt}, similar appearance and style to reference photo, matching facial structure and professional aesthetic`;
   }
 
   return {

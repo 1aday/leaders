@@ -3,6 +3,8 @@ import { generateLeaderBibleWithOpenAI } from "@/lib/ai/leader-generator";
 import { upsertLeaderFromJson } from "@/lib/db/leader-persist";
 import { researchPerson } from "@/lib/ai/leader-research";
 import type { ResearchResult } from "@/lib/ai/leader-research";
+import { fetchReferenceImages } from "@/lib/search/serpapi-images";
+import type { ReferenceImage } from "@/lib/search/serpapi-images";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,6 +13,7 @@ type Body = {
   name?: string;
   description?: string;
   webSearch?: boolean;
+  findReferencePhotos?: boolean;
 };
 
 export async function POST(req: Request) {
@@ -19,11 +22,15 @@ export async function POST(req: Request) {
     const name = typeof body.name === "string" ? body.name : undefined;
     const description = typeof body.description === "string" ? body.description : undefined;
     const webSearch = body.webSearch === true;
+    const findReferencePhotos = body.findReferencePhotos === true;
 
     // Create a TransformStream for Server-Sent Events
     const { readable, writable } = new TransformStream();
     const writer = writable.getWriter();
     const encoder = new TextEncoder();
+
+    // Generate session ID for image selection cache
+    const genStartTime = Date.now();
 
     // Helper to send SSE messages
     const sendSSE = (type: string, data: Record<string, unknown>) => {
@@ -38,8 +45,42 @@ export async function POST(req: Request) {
     (async () => {
       try {
         let research: ResearchResult | undefined;
+        let referenceImages: ReferenceImage[] = [];
 
-        // STAGE 1: Web Search Research (if enabled and name provided)
+        // STAGE 1: Parallel execution of research + image fetching
+        // Process each independently so images show immediately when ready
+
+        // Start image fetching (don't await - let it run in background)
+        if (findReferencePhotos && name) {
+          sendSSE("images_fetching", { message: "Searching for reference photos..." });
+
+          fetchReferenceImages(name, description)
+            .then((images) => {
+              referenceImages = images;
+              if (images.length > 0) {
+                sendSSE("images_ready", {
+                  images: images.map(img => ({
+                    url: img.url,
+                    thumbnail: img.thumbnail,
+                    title: img.title,
+                    source: img.source,
+                  })),
+                });
+              } else {
+                sendSSE("images_failed", {
+                  message: "No reference photos found, continuing with text-to-image...",
+                });
+              }
+            })
+            .catch((error) => {
+              console.error("[SerpAPI] Failed:", error);
+              sendSSE("images_failed", {
+                message: "Reference photo search failed, continuing with text-to-image...",
+              });
+            });
+        }
+
+        // Handle research (await this one)
         if (webSearch && name) {
           sendSSE("stage", { stage: "research", message: `Researching ${name} on the web...` });
 
@@ -136,6 +177,42 @@ export async function POST(req: Request) {
           }
         }
 
+        // STAGE 1.5: Wait for image selection if images were found
+        let selectedImageUrl: string | null = null;
+        if (referenceImages.length > 0) {
+          sendSSE("stage", {
+            stage: "image_selection",
+            message: "Waiting for image selection...",
+          });
+
+          // Poll for selection with timeout (60 seconds)
+          const selectionDeadline = Date.now() + 60_000;
+          while (Date.now() < selectionDeadline) {
+            try {
+              const selectionRes = await fetch(
+                `${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/api/leader/select-image?sessionId=${genStartTime}`,
+                { cache: "no-store" }
+              );
+
+              if (selectionRes.ok) {
+                const selectionData = await selectionRes.json();
+                selectedImageUrl = selectionData.imageUrl;
+                console.log(`[Generation] User selected image:`, selectedImageUrl ?? "skipped");
+                break;
+              }
+            } catch (e) {
+              // Selection not ready yet, continue polling
+            }
+
+            // Wait 500ms before next poll
+            await new Promise(r => setTimeout(r, 500));
+          }
+
+          if (selectedImageUrl === null && Date.now() >= selectionDeadline) {
+            console.warn("[Generation] Image selection timed out, continuing without reference");
+          }
+        }
+
         // STAGE 2: Generate Leader Bible JSON
         sendSSE("stage", {
           stage: "generation",
@@ -187,7 +264,7 @@ export async function POST(req: Request) {
               return;
             }
 
-            // Call avatar API
+            // Call avatar API with reference image if selected
             const avatarRes = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/api/avatar`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -197,6 +274,7 @@ export async function POST(req: Request) {
                 aspectRatio: "1:1",
                 outputFormat: "png",
                 isRegeneration: false,
+                referenceImageUrl: selectedImageUrl ?? undefined,
               }),
             });
 

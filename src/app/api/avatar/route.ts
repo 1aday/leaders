@@ -12,6 +12,7 @@ type Body = {
   aspectRatio?: string;
   outputFormat?: string;
   isRegeneration?: boolean;
+  referenceImageUrl?: string;
 };
 
 export async function POST(req: Request) {
@@ -32,14 +33,43 @@ export async function POST(req: Request) {
       leaderJson,
       leaderId: body.leaderId,
       isRegeneration: body.isRegeneration ?? false,
+      referenceImageUrl: body.referenceImageUrl,
     });
 
-    const img = await generateAvatarWithReplicate({
-      prompt: promptResult.prompt,
-      negativePrompt: promptResult.negativePrompt,
-      aspectRatio: body.aspectRatio ?? "1:1",
-      outputFormat: body.outputFormat ?? "png",
-    });
+    let img: { imageUrl: string; predictionId: string; usedFallback?: boolean };
+
+    try {
+      img = await generateAvatarWithReplicate({
+        prompt: promptResult.prompt,
+        negativePrompt: promptResult.negativePrompt,
+        aspectRatio: body.aspectRatio ?? "1:1",
+        outputFormat: body.outputFormat ?? "png",
+      });
+    } catch (error) {
+      // If reference image generation fails, retry without reference enhancement
+      if (body.referenceImageUrl) {
+        console.warn("[Avatar] Reference-enhanced generation failed, retrying without reference:", error);
+
+        // Regenerate prompt without reference URL
+        const fallbackPrompt = await generateAvatarPromptWithOpenAI({
+          leaderJson,
+          leaderId: body.leaderId,
+          isRegeneration: body.isRegeneration ?? false,
+        });
+
+        img = await generateAvatarWithReplicate({
+          prompt: fallbackPrompt.prompt,
+          negativePrompt: fallbackPrompt.negativePrompt,
+          aspectRatio: body.aspectRatio ?? "1:1",
+          outputFormat: body.outputFormat ?? "png",
+        });
+
+        img.usedFallback = true;
+      } else {
+        // No reference was used, re-throw the error
+        throw error;
+      }
+    }
 
     // Best-effort persistence: Download blob from Replicate and upload to permanent Supabase Storage
     let finalImageUrl = img.imageUrl; // Default to Replicate URL as fallback
@@ -90,6 +120,7 @@ export async function POST(req: Request) {
             outputFormat: body.outputFormat ?? "png",
             replicateUrl: img.imageUrl,
             supabaseUrl: finalImageUrl !== img.imageUrl ? finalImageUrl : undefined,
+            referenceImageUrl: body.referenceImageUrl ?? undefined,
           },
         });
       }

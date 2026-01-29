@@ -175,12 +175,18 @@ export async function generateKlingTrailerPromptWithOpenAI(opts: {
   const voice = comm && isPlainObject(comm.voice) ? (comm.voice as AnyRecord) : null;
   const voiceIdentity = root && isPlainObject(root.voiceIdentity) ? (root.voiceIdentity as AnyRecord) : null;
   const voiceChars = voiceIdentity && isPlainObject(voiceIdentity.voiceCharacteristics) ? (voiceIdentity.voiceCharacteristics as AnyRecord) : null;
+  const expertiseDomain = root && isPlainObject(root.expertiseDomain) ? (root.expertiseDomain as AnyRecord) : null;
+  const primaryExpertise = expertiseDomain && Array.isArray(expertiseDomain.primary)
+    ? (expertiseDomain.primary as unknown[]).filter((v) => typeof v === "string") as string[]
+    : [];
 
   const compact = {
     id: opts.leaderId ?? pickString(meta, "leaderId"),
     vertical: pickString(meta, "vertical"),
     subDomains: Array.isArray(meta?.subDomains) ? (meta?.subDomains as unknown[]).filter((v) => typeof v === "string").slice(0, 6) : undefined,
+    expertiseDomain: primaryExpertise.slice(0, 5),
     tagline: pickString(core, "tagline"),
+    positioning: pickString(core, "positioning"),
     missionStatement: pickString(core, "missionStatement"),
     archetype: pickString(visualStyle, "archetype") ?? pickString(visual, "archetype"),
     styleNotes: pickString(visualStyle, "styleNotes") ?? pickString(visualStyle, "wardrobe"),
@@ -202,7 +208,8 @@ export async function generateKlingTrailerPromptWithOpenAI(opts: {
     "CRITICAL: Refer to the subject ONLY as 'this person' (NEVER use a name, NEVER use 'he' or 'she', always 'this person').",
     "CRITICAL: Your prompt MUST start with: 'Match the provided reference image. This person...'",
     "Include exactly ONE short spoken line for this person, written in quotes, and do not include any other quoted text.",
-    "The spoken line MUST be first-person and MUST communicate: who this person is + what this person helps with (e.g., 'I help you ____').",
+    "The spoken line MUST be first-person and MUST communicate what this person helps with using their EXPERTISE DOMAINS (e.g., 'I help you with blockchain technology and smart contracts' NOT 'I help you with Blockchain Innovator').",
+    "CRITICAL: Use expertiseDomain fields to describe WHAT they help with, NOT the tagline (tagline is their role/title). Format: 'I help you with [expertise1, expertise2, and expertise3]' or 'I help you [action based on positioning]'.",
     "Keep the spoken line to 8–16 words. No hype. No clichés. No promises of riches.",
     "IMPORTANT: Do NOT mention duration, seconds, 5s/10s, or timing anywhere in the prompt.",
     "IMPORTANT: Do NOT include any on-screen text. No captions. No subtitles. No logos. No watermarks.",
@@ -223,7 +230,7 @@ export async function generateKlingTrailerPromptWithOpenAI(opts: {
     "",
     "Task:",
     "- Produce a single paragraph prompt for a talking-head intro video where the main point is what this person says.",
-    "- Dialogue: include exactly ONE spoken line in quotes. Format: 'I'm a [WHO] and I help you [WHAT]' or 'I help you [WHAT]' (8-16 words). WHO = their role/identity (from tagline/positioning). WHAT = what they help people DO or ACHIEVE (from mission/expertise/positioning), NOT just their title. Use voice/doSay/catchphrases/mission to match their tone.",
+    "- Dialogue: include exactly ONE spoken line in quotes. Format: 'I help you with [EXPERTISE]' or 'I help you [ACTION]' (8-16 words). CRITICAL: Use expertiseDomain array to describe WHAT they help with (e.g., 'I help you with blockchain technology, smart contracts, and decentralization' NOT 'I help you with Blockchain Innovator'). The tagline describes WHO they are (their role/title), NOT what they help with. Use positioning/mission for the ACTION verb if not using expertiseDomain. Match tone using voice/doSay/catchphrases.",
     "- Performance: specify tone, pacing, and expression so lip-sync feels natural (e.g., calm, confident, warm; direct-to-camera). If spokenAccent is provided, incorporate it naturally (e.g., 'speaking English with a subtle Japanese accent').",
     "- Visuals: keep the scene minimal and non-distracting. ONLY if it clearly supports the expertise, include at most 1–2 abstract visual aids behind/around this person (examples: bitcoin → warm gold coin motif / abstract ledger glow; finance → faint chart-line light patterns; healthcare → abstract pulse waveform light). No readable text/logos.",
     "- Camera/lighting: keep it simple (stable framing; gentle push-in or slight orbit). No technical jargon.",
@@ -304,6 +311,10 @@ export function buildKlingTrailerPrompt(opts: { leaderJson: unknown; leaderId?: 
   const voiceIdentity = root && isPlainObject(root.voiceIdentity) ? (root.voiceIdentity as AnyRecord) : null;
   const voiceChars = voiceIdentity && isPlainObject(voiceIdentity.voiceCharacteristics) ? (voiceIdentity.voiceCharacteristics as AnyRecord) : null;
   const spokenAccent = pickString(voiceChars, "spokenAccent");
+  const expertiseDomain = root && isPlainObject(root.expertiseDomain) ? (root.expertiseDomain as AnyRecord) : null;
+  const primaryExpertise = expertiseDomain && Array.isArray(expertiseDomain.primary)
+    ? (expertiseDomain.primary as unknown[]).filter((v) => typeof v === "string") as string[]
+    : [];
 
   const compactLeaderInfo = {
     id: opts.leaderId ?? pickString(meta, "leaderId"),
@@ -311,6 +322,7 @@ export function buildKlingTrailerPrompt(opts: { leaderJson: unknown; leaderId?: 
     tagline: pickString(core, "tagline"),
     missionStatement: pickString(core, "missionStatement"),
     vertical: pickString(meta, "vertical"),
+    expertiseDomain: primaryExpertise.slice(0, 5),
     archetype: pickString(visualStyle, "archetype") ?? pickString(visual, "archetype"),
     styleNotes: pickString(visualStyle, "styleNotes") ?? pickString(visualStyle, "wardrobe"),
     voiceSummary: pickString(voice, "summary"),
@@ -353,25 +365,35 @@ export function buildKlingTrailerPrompt(opts: { leaderJson: unknown; leaderId?: 
     if (d0 && /\bi help\b/i.test(d0)) return d0;
     if (c0 && /\bi help\b/i.test(c0)) return c0;
 
-    // Fall back: construct a help statement from positioning/vertical, NOT tagline
-    // Tagline describes WHO they are, not what they help with
+    // Fall back: construct a help statement using expertise domains
+    // Tagline describes WHO they are, positioning describes HOW, expertise describes WHAT
     const positioning = pickString(core, "positioning");
     const vertical = pickString(meta, "vertical");
 
-    if (t && t.split(/\s+/).length <= 8) {
-      // Use tagline to describe WHO, then add generic help statement
-      return `I'm a ${t.toLowerCase()}. I help you make confident, informed decisions.`;
+    // PRIORITY 1: Use expertise domains to construct "I help you with X, Y, and Z"
+    if (primaryExpertise.length > 0) {
+      const expertiseList = primaryExpertise.slice(0, 3).map((e) => e.toLowerCase());
+      if (expertiseList.length === 1) {
+        return `I help you with ${expertiseList[0]}.`;
+      } else if (expertiseList.length === 2) {
+        return `I help you with ${expertiseList[0]} and ${expertiseList[1]}.`;
+      } else {
+        const last = expertiseList.pop();
+        return `I help you with ${expertiseList.join(", ")}, and ${last}.`;
+      }
     }
 
-    // Use positioning or vertical to describe WHAT they help with
+    // PRIORITY 2: Use positioning to describe what they help with
     if (positioning && positioning.split(/\s+/).length <= 12) {
       return `I help you ${positioning.toLowerCase()}.`;
     }
 
+    // PRIORITY 3: Use vertical + generic help phrase
     if (vertical && vertical.split(/\s+/).length <= 3) {
       return `I help you navigate ${vertical.toLowerCase()} with clarity and confidence.`;
     }
 
+    // LAST RESORT: Generic help statement
     return "I help you get clarity and take the next best step.";
   })();
 
