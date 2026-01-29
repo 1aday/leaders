@@ -29,6 +29,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "leaderRawJson must be valid JSON" }, { status: 400 });
     }
 
+    console.log(`[Avatar API] 🎨 Starting generation for ${body.leaderId || 'unknown'}`);
+    console.log(`[Avatar API] 📸 Reference image: ${body.referenceImageUrl ? 'YES' : 'NO'}`);
+    if (body.referenceImageUrl) {
+      console.log(`[Avatar API] 🖼️  Reference URL: ${body.referenceImageUrl}`);
+      console.log(`[Avatar API] ✅ Will use: google/nano-banana-pro (image-to-image)`);
+    } else {
+      console.log(`[Avatar API] ✅ Will use: google/imagen-3 (text-to-image)`);
+    }
+
     const promptResult = await generateAvatarPromptWithOpenAI({
       leaderJson,
       leaderId: body.leaderId,
@@ -36,40 +45,18 @@ export async function POST(req: Request) {
       referenceImageUrl: body.referenceImageUrl,
     });
 
-    let img: { imageUrl: string; predictionId: string; usedFallback?: boolean };
+    let img: { imageUrl: string; predictionId: string; usedFallback?: boolean; model?: string };
 
-    try {
-      img = await generateAvatarWithReplicate({
-        prompt: promptResult.prompt,
-        negativePrompt: promptResult.negativePrompt,
-        aspectRatio: body.aspectRatio ?? "1:1",
-        outputFormat: body.outputFormat ?? "png",
-      });
-    } catch (error) {
-      // If reference image generation fails, retry without reference enhancement
-      if (body.referenceImageUrl) {
-        console.warn("[Avatar] Reference-enhanced generation failed, retrying without reference:", error);
+    // NO FALLBACK - if nano-banana-pro fails with reference image, let it fail
+    img = await generateAvatarWithReplicate({
+      prompt: promptResult.prompt,
+      negativePrompt: promptResult.negativePrompt,
+      aspectRatio: body.aspectRatio ?? "1:1",
+      outputFormat: body.outputFormat ?? "png",
+      imageInput: body.referenceImageUrl, // Pass reference image URL
+    });
 
-        // Regenerate prompt without reference URL
-        const fallbackPrompt = await generateAvatarPromptWithOpenAI({
-          leaderJson,
-          leaderId: body.leaderId,
-          isRegeneration: body.isRegeneration ?? false,
-        });
-
-        img = await generateAvatarWithReplicate({
-          prompt: fallbackPrompt.prompt,
-          negativePrompt: fallbackPrompt.negativePrompt,
-          aspectRatio: body.aspectRatio ?? "1:1",
-          outputFormat: body.outputFormat ?? "png",
-        });
-
-        img.usedFallback = true;
-      } else {
-        // No reference was used, re-throw the error
-        throw error;
-      }
-    }
+    console.log(`[Avatar API] ✅ Generation complete using model: ${img.model || 'unknown'}`);
 
     // Best-effort persistence: Download blob from Replicate and upload to permanent Supabase Storage
     let finalImageUrl = img.imageUrl; // Default to Replicate URL as fallback
@@ -116,6 +103,7 @@ export async function POST(req: Request) {
           meta: {
             isFamousPerson: promptResult.isFamousPerson,
             usedFallbackModel: img.usedFallback ?? false,
+            model: img.model ?? "unknown",
             aspectRatio: body.aspectRatio ?? "1:1",
             outputFormat: body.outputFormat ?? "png",
             replicateUrl: img.imageUrl,
@@ -135,6 +123,7 @@ export async function POST(req: Request) {
       prompt: promptResult.prompt,
       isFamousPerson: promptResult.isFamousPerson,
       usedFallbackModel: img.usedFallback ?? false,
+      model: img.model ?? "unknown",
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";

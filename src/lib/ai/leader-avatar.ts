@@ -377,10 +377,8 @@ export async function generateAvatarPromptWithOpenAI(opts: {
     prompt = buildVisualAttributesPrompt({ physical, visualStyle, isRegeneration: opts.isRegeneration });
   }
 
-  // If reference image provided, enhance prompt with visual similarity instruction
-  if (opts.referenceImageUrl) {
-    prompt = `${prompt}, similar appearance and style to reference photo, matching facial structure and professional aesthetic`;
-  }
+  // When reference image is provided, keep the same prompt
+  // The image_input will guide the generation
 
   return {
     prompt,
@@ -529,7 +527,104 @@ async function generateAvatarWithFallbackModel(opts: {
 }
 
 /**
- * Primary image generation using google/imagen-3 model
+ * Image generation with nano-banana-pro (when reference image provided)
+ */
+async function generateAvatarWithNanoBananaPro(opts: {
+  prompt: string;
+  imageInput: string; // Reference image URL (required for this model)
+  aspectRatio?: string;
+  outputFormat?: string;
+}): Promise<{ imageUrl: string; predictionId: string }> {
+  const token = process.env.REPLICATE_API_TOKEN;
+  if (!token) throw new Error("Missing REPLICATE_API_TOKEN");
+
+  const modelOwner = "google";
+  const modelName = "nano-banana-pro";
+
+  const modelRes = await fetch(`https://api.replicate.com/v1/models/${modelOwner}/${modelName}`, {
+    headers: {
+      Authorization: `Token ${token}`,
+      "Content-Type": "application/json",
+    },
+    cache: "no-store",
+  });
+
+  if (!modelRes.ok) {
+    const text = await modelRes.text().catch(() => "");
+    throw new Error(`Replicate model lookup failed (${modelRes.status}): ${text || modelRes.statusText}`);
+  }
+
+  const modelJson = (await modelRes.json()) as AnyRecord;
+  const latestVersion =
+    isPlainObject(modelJson.latest_version) && typeof modelJson.latest_version.id === "string"
+      ? (modelJson.latest_version.id as string)
+      : null;
+  if (!latestVersion) throw new Error("Replicate model lookup missing latest_version.id");
+
+  console.log(`[nano-banana-pro] 📤 Creating prediction with google/nano-banana-pro`);
+  console.log(`[nano-banana-pro] 📸 image_input: [${opts.imageInput}]`);
+  console.log(`[nano-banana-pro] ✍️  prompt: ${opts.prompt.substring(0, 100)}...`);
+
+  const createRes = await fetch("https://api.replicate.com/v1/predictions", {
+    method: "POST",
+    headers: {
+      Authorization: `Token ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      version: latestVersion, // Just the version ID hash, not owner/name:version
+      input: {
+        prompt: opts.prompt,
+        image_input: [opts.imageInput], // Array of image URLs
+        aspect_ratio: opts.aspectRatio ?? "1:1",
+        output_format: opts.outputFormat ?? "png",
+        resolution: "2K",
+        safety_filter_level: "block_only_high",
+      },
+    }),
+  });
+
+  if (!createRes.ok) {
+    const text = await createRes.text().catch(() => "");
+    throw new Error(`Replicate create prediction failed (${createRes.status}): ${text || createRes.statusText}`);
+  }
+
+  const created = (await createRes.json()) as ReplicatePrediction;
+  if (!created?.id) throw new Error("Replicate create prediction missing id");
+
+  const deadline = Date.now() + 90_000; // 90s timeout
+  let prediction: ReplicatePrediction = created;
+  while (prediction.status === "starting" || prediction.status === "processing") {
+    if (Date.now() > deadline) throw new Error("Replicate prediction timed out");
+    await new Promise((r) => setTimeout(r, 1500));
+
+    const pollRes = await fetch(`https://api.replicate.com/v1/predictions/${created.id}`, {
+      headers: {
+        Authorization: `Token ${token}`,
+        "Content-Type": "application/json",
+      },
+      cache: "no-store",
+    });
+    if (!pollRes.ok) {
+      const text = await pollRes.text().catch(() => "");
+      throw new Error(`Replicate poll failed (${pollRes.status}): ${text || pollRes.statusText}`);
+    }
+    prediction = (await pollRes.json()) as ReplicatePrediction;
+  }
+
+  if (prediction.status !== "succeeded") {
+    const err = typeof prediction.error === "string" ? prediction.error : "Replicate failed";
+    throw new Error(err);
+  }
+
+  const url = normalizeReplicateOutputToUrl(prediction.output);
+  if (!url) throw new Error("Replicate succeeded but returned no image URL");
+
+  return { imageUrl: url, predictionId: prediction.id };
+}
+
+/**
+ * Primary image generation using google/imagen-3 model (text-to-image only)
  */
 async function generateAvatarWithPrimaryModel(opts: {
   prompt: string;
@@ -540,7 +635,6 @@ async function generateAvatarWithPrimaryModel(opts: {
   const token = process.env.REPLICATE_API_TOKEN;
   if (!token) throw new Error("Missing REPLICATE_API_TOKEN");
 
-  // Fetch latest version so we don't hard-code version IDs.
   const modelOwner = "google";
   const modelName = "imagen-3";
   const modelRes = await fetch(`https://api.replicate.com/v1/models/${modelOwner}/${modelName}`, {
@@ -624,26 +718,47 @@ export async function generateAvatarWithReplicate(opts: {
   negativePrompt?: string;
   aspectRatio?: string; // e.g. "1:1"
   outputFormat?: string; // e.g. "png"
-}): Promise<{ imageUrl: string; predictionId: string; usedFallback?: boolean }> {
+  imageInput?: string; // Reference image URL
+}): Promise<{ imageUrl: string; predictionId: string; usedFallback?: boolean; model?: string }> {
+
+  // If reference image provided, use nano-banana-pro (NO FALLBACK - fail if it fails)
+  if (opts.imageInput) {
+    console.log("[Avatar] ✅ Using google/nano-banana-pro for image-to-image generation");
+    console.log("[Avatar] 📸 Reference image:", opts.imageInput);
+    const result = await generateAvatarWithNanoBananaPro({
+      prompt: opts.prompt,
+      imageInput: opts.imageInput,
+      aspectRatio: opts.aspectRatio,
+      outputFormat: opts.outputFormat,
+    });
+    console.log("[Avatar] ✅ nano-banana-pro succeeded");
+    return { ...result, usedFallback: false, model: "google/nano-banana-pro" };
+  }
+
+  // Otherwise use imagen-3 for text-to-image
   try {
-    // Try primary model first (google/imagen-3)
-    const result = await generateAvatarWithPrimaryModel(opts);
-    return { ...result, usedFallback: false };
+    console.log("[Avatar] Using imagen-3 for text-to-image generation");
+    const result = await generateAvatarWithPrimaryModel({
+      prompt: opts.prompt,
+      negativePrompt: opts.negativePrompt,
+      aspectRatio: opts.aspectRatio,
+      outputFormat: opts.outputFormat,
+    });
+    return { ...result, usedFallback: false, model: "imagen-3" };
   } catch (primaryError) {
     // If content was flagged as sensitive, try fallback model
     if (isSensitiveContentError(primaryError)) {
-      console.log("[Avatar] Primary model flagged sensitive content, trying fallback model (prunaai/z-image-turbo)");
+      console.log("[Avatar] imagen-3 flagged sensitive content, trying fallback model (prunaai/z-image-turbo)");
       try {
-        return await generateAvatarWithFallbackModel({
+        const result = await generateAvatarWithFallbackModel({
           prompt: opts.prompt,
           aspectRatio: opts.aspectRatio,
         });
+        return { ...result, model: "z-image-turbo" };
       } catch (fallbackError) {
-        // If fallback also fails, throw the fallback error
         throw fallbackError;
       }
     }
-    // For non-sensitive errors, just re-throw the original error
     throw primaryError;
   }
 }

@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import {
   ArrowLeft,
@@ -495,6 +495,7 @@ function extractMediaUrls(parsed: unknown): {
 
 export function LeaderDetailApp({ id }: { id: string }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { confirm, ConfirmDialog } = useConfirm();
   const [leader, setLeader] = React.useState<LeaderSummary | null>(null);
   const [mounted, setMounted] = React.useState(false);
@@ -531,6 +532,75 @@ export function LeaderDetailApp({ id }: { id: string }) {
     }
     loadLeader();
   }, [id]);
+
+  // Trigger avatar generation if navigated from generation page
+  React.useEffect(() => {
+    const isGenerating = searchParams.get('generating') === 'avatar';
+    const referenceImageUrl = searchParams.get('referenceImageUrl');
+
+    console.log('[LeaderDetailApp] useEffect triggered');
+    console.log('[LeaderDetailApp] isGenerating:', isGenerating);
+    console.log('[LeaderDetailApp] referenceImageUrl from URL params:', referenceImageUrl);
+    console.log('[LeaderDetailApp] leader exists:', !!leader);
+
+    if (!isGenerating || !leader) return;
+
+    // If avatar already exists, no need to generate
+    if (leader.profilePicUrl) {
+      console.log('[Avatar] Avatar already exists, clearing generating flag');
+      router.replace(`/leaders/${id}`);
+      return;
+    }
+
+    console.log('[Avatar] ✅ Starting generation');
+    console.log('[Avatar] 📸 Reference image URL:', referenceImageUrl);
+    console.log('[Avatar] 🎯 Will pass to API:', referenceImageUrl || 'NONE');
+    setGeneratingAvatar(true);
+
+    // Trigger avatar generation
+    (async () => {
+      try {
+        const requestBody = {
+          leaderRawJson: leader.rawJson,
+          leaderId: id,
+          aspectRatio: '1:1',
+          outputFormat: 'png',
+          isRegeneration: false,
+          referenceImageUrl: referenceImageUrl || undefined,
+        };
+
+        console.log('[Avatar] 📤 Sending request to /api/avatar');
+        console.log('[Avatar] 📦 Request body:', JSON.stringify(requestBody, null, 2));
+
+        const res = await fetch('/api/avatar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody),
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          console.error('[Avatar] Generation failed:', err);
+          setGeneratingAvatar(false);
+          router.replace(`/leaders/${id}`);
+          return;
+        }
+
+        const data = await res.json();
+        console.log('[Avatar] Generation complete:', data.profilePicUrl);
+
+        // Reload leader to get new avatar
+        const refreshed = await fetchLeaderById(id);
+        setLeader(refreshed);
+        setGeneratingAvatar(false);
+        router.replace(`/leaders/${id}`);
+      } catch (e) {
+        console.error('[Avatar] Generation error:', e);
+        setGeneratingAvatar(false);
+        router.replace(`/leaders/${id}`);
+      }
+    })();
+  }, [id, leader, searchParams, router]);
 
   const parsed = React.useMemo(() => {
     if (!leader) return null;

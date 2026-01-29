@@ -280,13 +280,29 @@ export function NewLeaderApp() {
     if (file) handleFile(file);
   }, [handleFile]);
 
-  // Fetch images immediately when toggle is enabled
+  // Fetch images with debounce - wait for user to stop typing
   React.useEffect(() => {
-    if (findPhotosEnabled && genName.trim().length > 0 && !generating) {
-      console.log('[Images] Fetching images for:', genName);
+    // Clear images immediately when toggle is disabled
+    if (!findPhotosEnabled) {
+      setReferenceImages([]);
+      setSelectedImageIndex(null);
+      setSelectedImageUrl(null);
+      setImageSelectionStage("idle");
+      return;
+    }
+
+    // Don't fetch if name is empty or already generating
+    if (!genName.trim() || generating) {
+      return;
+    }
+
+    // Debounce: wait 800ms after user stops typing
+    const debounceTimer = setTimeout(() => {
+      console.log('[Images] Starting fetch for:', genName);
       setImageSelectionStage("fetching");
       setReferenceImages([]);
       setSelectedImageIndex(null);
+      setSelectedImageUrl(null);
 
       fetch("/api/leader/fetch-images", {
         method: "POST",
@@ -296,42 +312,67 @@ export function NewLeaderApp() {
           description: genDescription.trim() || undefined,
         }),
       })
-        .then(res => res.json())
+        .then(async (res) => {
+          if (!res.ok) {
+            const errorText = await res.text();
+            console.error('[Images] API error:', res.status, errorText);
+            throw new Error(`API returned ${res.status}: ${errorText}`);
+          }
+          return res.json();
+        })
         .then(data => {
-          console.log('[Images] Received:', data.images?.length, 'images');
-          if (data.images && data.images.length > 0) {
+          console.log('[Images] Response data:', data);
+          if (data.error) {
+            console.error('[Images] API returned error:', data.error);
+            setImageSelectionStage("idle");
+            return;
+          }
+          if (data.images && Array.isArray(data.images) && data.images.length > 0) {
+            console.log('[Images] Successfully received', data.images.length, 'images');
             setReferenceImages(data.images);
             setImageSelectionStage("selecting");
           } else {
+            console.warn('[Images] No images returned');
             setImageSelectionStage("idle");
           }
         })
         .catch(error => {
-          console.error('[Images] Failed to fetch:', error);
+          console.error('[Images] Fetch failed:', error);
           setImageSelectionStage("idle");
         });
-    } else if (!findPhotosEnabled) {
-      // Clear images when toggle is disabled
-      setReferenceImages([]);
-      setSelectedImageIndex(null);
-      setImageSelectionStage("idle");
-    }
+    }, 800); // 800ms debounce
+
+    return () => clearTimeout(debounceTimer);
   }, [findPhotosEnabled, genName, genDescription, generating]);
 
-  // Helper function to send image selection to backend
+  // Helper function to download and save image selection
   const continueGenerationWithImage = React.useCallback(async (imageUrl: string) => {
+    console.log("[Image Selection] 📸 User clicked image:", imageUrl);
+    console.log("[Image Selection] 📥 Downloading and saving to Supabase...");
+
     try {
-      await fetch("/api/leader/select-image", {
+      // Download and save image to our storage
+      const saveRes = await fetch("/api/leader/save-reference-image", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          sessionId: String(genStartTime),
-          selectedImageUrl: imageUrl,
+          imageUrl: imageUrl,
+          leaderId: genName.trim().replace(/\s+/g, "-").toUpperCase(),
         }),
       });
+
+      if (!saveRes.ok) {
+        throw new Error(`Failed to save image: ${saveRes.status}`);
+      }
+
+      const saveData = await saveRes.json();
+      const savedUrl = saveData.savedUrl;
+
+      console.log("[Image Selection] ✅ Image saved to:", savedUrl);
+
       setImageSelectionStage("selected");
-      setSelectedImageUrl(imageUrl); // Store for display later
-      console.log("[UI] Image selection sent:", imageUrl);
+      setSelectedImageUrl(savedUrl); // Store Supabase URL (not original)
+      console.log("[Image Selection] ✅ State updated with Supabase URL:", savedUrl);
     } catch (e) {
       console.error("Failed to send image selection:", e);
       setGenError("Failed to send image selection");
@@ -371,10 +412,7 @@ export function NewLeaderApp() {
     setGenStage("waiting");
     setResearchStage(null);
     setResearchResults(null);
-    setSelectedImageUrl(null); // Reset selected image
-    setReferenceImages([]); // Reset reference images
-    setSelectedImageIndex(null); // Reset selection
-    setImageSelectionStage("idle"); // Reset stage
+    // DON'T reset selected image - keep it visible during generation
     setGenStartTime(Date.now());
     const name = forceRandom ? "" : genName.trim();
     const description = forceRandom ? "" : genDescription.trim();
@@ -415,17 +453,26 @@ export function NewLeaderApp() {
 
     try {
       console.log('[GENERATE] Starting fetch to /api/leader/generate');
-      console.log('[GENERATE] Request body:', { name, description, webSearch: useWebSearch });
+      console.log('[GENERATE] 📊 State before sending:');
+      console.log('[GENERATE]   - selectedImageUrl:', selectedImageUrl);
+      console.log('[GENERATE]   - selectedImageIndex:', selectedImageIndex);
+      console.log('[GENERATE]   - imageSelectionStage:', imageSelectionStage);
+      console.log('[GENERATE]   - referenceImages count:', referenceImages.length);
+
+      const requestBody = {
+        name,
+        description,
+        webSearch: useWebSearch,
+        findReferencePhotos: findPhotosEnabled && genName.trim().length > 0,
+        selectedImageUrl: selectedImageUrl || undefined, // Pass selected image directly
+      };
+
+      console.log('[GENERATE] 📤 Request body:', requestBody);
 
       const res = await fetch("/api/leader/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name,
-          description,
-          webSearch: useWebSearch,
-          findReferencePhotos: findPhotosEnabled && genName.trim().length > 0,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       console.log('[GENERATE] Fetch completed, status:', res.status);
@@ -478,6 +525,8 @@ export function NewLeaderApp() {
                   type: string;
                   percentage?: number;
                   leader?: unknown;
+                  leaderId?: string;
+                  selectedImageUrl?: string;
                   error?: string;
                   stage?: string;
                   message?: string;
@@ -644,7 +693,7 @@ export function NewLeaderApp() {
                     }
                   }
                 } else if (json.type === "complete") {
-                  console.log('[SSE] Generation complete, finishing stream');
+                  console.log('[SSE] ✅ Generation complete, finishing stream');
                   const leader = json.leader;
                   if (!leader) throw new Error("API returned no leader JSON");
 
@@ -655,6 +704,40 @@ export function NewLeaderApp() {
                   setEditingJson(false);
                   setGenProgress(100);
                   setResearchStage(null);
+
+                  // Get leaderId and selectedImageUrl from response
+                  const leaderId = json.leaderId;
+                  const imageUrlFromResponse = json.selectedImageUrl;
+
+                  console.log('[Navigation] 📦 Complete event data:');
+                  console.log('[Navigation]   - leaderId:', leaderId);
+                  console.log('[Navigation]   - selectedImageUrl from response:', imageUrlFromResponse);
+                  console.log('[Navigation]   - selectedImageUrl from state:', selectedImageUrl);
+
+                  if (leaderId && typeof leaderId === 'string') {
+                    console.log('[Navigation] ✅ Navigating to leader detail page:', leaderId);
+
+                    // Build URL with avatar generation params
+                    const params = new URLSearchParams({ generating: 'avatar' });
+
+                    // Use selectedImageUrl from state if response doesn't have it
+                    const finalImageUrl = imageUrlFromResponse || selectedImageUrl;
+
+                    if (finalImageUrl) {
+                      console.log('[Navigation] 📸 Adding referenceImageUrl to params:', finalImageUrl);
+                      params.set('referenceImageUrl', finalImageUrl);
+                    } else {
+                      console.warn('[Navigation] ⚠️  NO reference image URL found');
+                    }
+
+                    const finalUrl = `/leaders/${leaderId}?${params.toString()}`;
+                    console.log('[Navigation] 🚀 Final URL:', finalUrl);
+
+                    // Navigate immediately - avatar will be generated on detail page
+                    router.push(finalUrl);
+                  } else {
+                    console.warn('[Navigation] No leaderId in response');
+                  }
 
                   // Signal to exit the stream reading loop
                   streamComplete = true;
@@ -1207,11 +1290,11 @@ export function NewLeaderApp() {
                     </div>
 
                     {/* Image Selection Gallery - Appears when images are ready */}
-                    {imageSelectionStage === "selecting" && referenceImages.length > 0 && (
-                      <div className="animate-in fade-in slide-in-from-top-2 duration-300 rounded-xl border border-purple-500/30 bg-gradient-to-br from-purple-500/5 to-transparent p-4">
+                    {(imageSelectionStage === "selecting" || imageSelectionStage === "selected") && referenceImages.length > 0 && !generating && (
+                      <div className="animate-in fade-in slide-in-from-top-2 duration-300 rounded-xl border border-border/60 bg-card/50 p-4">
                         <div className="mb-3 flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-purple-500/10">
+                            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10">
                               <span className="text-sm">📸</span>
                             </div>
                             <div>
@@ -1223,60 +1306,111 @@ export function NewLeaderApp() {
                               </div>
                             </div>
                           </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => void continueGenerationWithoutImage()}
-                            className="h-7 gap-1.5 rounded-full text-xs"
-                          >
-                            <X className="h-3 w-3" />
-                            Skip
-                          </Button>
+                          {imageSelectionStage === "selecting" && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => void continueGenerationWithoutImage()}
+                              className="h-7 gap-1.5 rounded-full text-xs"
+                            >
+                              <X className="h-3 w-3" />
+                              Skip
+                            </Button>
+                          )}
                         </div>
 
-                        {/* Scrollable image grid */}
-                        <div className="relative -mx-1 overflow-x-auto pb-2">
-                          <div className="flex gap-2 px-1">
-                            {referenceImages.map((img, i) => (
-                              <button
-                                key={i}
-                                onClick={() => {
-                                  setSelectedImageIndex(i);
-                                  void continueGenerationWithImage(img.url);
-                                }}
-                                className={cn(
-                                  "relative flex-shrink-0 overflow-hidden rounded-lg border-2 transition-all duration-200",
-                                  selectedImageIndex === i
-                                    ? "border-purple-500 ring-4 ring-purple-500/20 scale-105"
-                                    : "border-border hover:border-purple-500/50 hover:scale-102"
-                                )}
-                                style={{ width: "120px", height: "120px" }}
-                              >
+                        {/* Show selected image prominently after selection */}
+                        {selectedImageIndex !== null && imageSelectionStage === "selected" ? (
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-center">
+                              <div className="relative overflow-hidden rounded-xl border border-border/60 shadow-lg">
                                 <img
-                                  src={img.thumbnail}
-                                  alt={img.title}
-                                  className="h-full w-full object-cover"
+                                  src={referenceImages[selectedImageIndex].url}
+                                  alt={referenceImages[selectedImageIndex].title}
+                                  className="h-64 w-64 object-cover"
                                 />
-                                {selectedImageIndex === i && (
-                                  <div className="absolute inset-0 flex items-center justify-center bg-purple-500/20">
-                                    <div className="rounded-full bg-purple-500 p-1.5">
-                                      <Check className="h-4 w-4 text-white" />
-                                    </div>
-                                  </div>
-                                )}
-                              </button>
-                            ))}
+                                <div className="absolute top-2 right-2 rounded-full bg-primary p-2 shadow-lg">
+                                  <Check className="h-5 w-5 text-primary-foreground" />
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 rounded-lg bg-primary/10 px-3 py-2">
+                              <Check className="h-4 w-4 text-primary" />
+                              <span className="text-xs text-foreground">
+                                Using this photo as reference for avatar generation
+                              </span>
+                            </div>
+                            <button
+                              onClick={() => {
+                                setSelectedImageIndex(null);
+                                setSelectedImageUrl(null);
+                                setImageSelectionStage("selecting");
+                              }}
+                              className="w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                              Change selection
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            {/* Scrollable image grid */}
+                            <div className="relative -mx-1 overflow-x-auto pb-2">
+                              <div className="flex gap-2 px-1">
+                                {referenceImages.map((img, i) => (
+                                  <button
+                                    key={i}
+                                    onClick={() => {
+                                      setSelectedImageIndex(i);
+                                      void continueGenerationWithImage(img.url);
+                                    }}
+                                    className={cn(
+                                      "relative flex-shrink-0 overflow-hidden rounded-lg border-2 transition-all duration-200",
+                                      selectedImageIndex === i
+                                        ? "border-primary ring-2 ring-primary/20"
+                                        : "border-border hover:border-primary/50"
+                                    )}
+                                    style={{ width: "120px", height: "120px" }}
+                                  >
+                                    <img
+                                      src={img.thumbnail}
+                                      alt={img.title}
+                                      className="h-full w-full object-cover"
+                                    />
+                                    {selectedImageIndex === i && (
+                                      <div className="absolute inset-0 flex items-center justify-center bg-primary/10">
+                                        <div className="rounded-full bg-primary p-1.5">
+                                          <Check className="h-4 w-4 text-primary-foreground" />
+                                        </div>
+                                      </div>
+                                    )}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Show selected image during generation */}
+                    {selectedImageUrl && generating && (
+                      <div className="rounded-xl border border-border/60 bg-card/50 p-4">
+                        <div className="flex items-center gap-3">
+                          <div className="relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-lg border border-border/60">
+                            <img
+                              src={selectedImageUrl}
+                              alt="Selected reference"
+                              className="h-full w-full object-cover"
+                            />
+                            <div className="absolute inset-0 flex items-center justify-center bg-primary/10">
+                              <Check className="h-4 w-4 text-primary" />
+                            </div>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-medium text-foreground">Using reference photo</div>
+                            <div className="text-xs text-muted-foreground">Avatar will be generated with this image as reference</div>
                           </div>
                         </div>
-
-                        {selectedImageIndex !== null && (
-                          <div className="mt-3 flex items-center gap-2 rounded-lg bg-purple-500/10 px-3 py-2">
-                            <Check className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                            <span className="text-xs text-purple-700 dark:text-purple-300">
-                              Image selected! Generation will continue automatically...
-                            </span>
-                          </div>
-                        )}
                       </div>
                     )}
 
@@ -1284,7 +1418,7 @@ export function NewLeaderApp() {
                     {imageSelectionStage === "fetching" && (
                       <div className="animate-in fade-in duration-300 rounded-xl border border-border/60 bg-muted/20 p-4">
                         <div className="flex items-center gap-3">
-                          <div className="h-2 w-2 rounded-full bg-purple-500 animate-pulse" />
+                          <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
                           <span className="text-sm text-muted-foreground">
                             Searching for reference photos...
                           </span>
@@ -1557,23 +1691,18 @@ export function NewLeaderApp() {
               </span>
             </div>
 
-            <Tabs value={previewTab} onValueChange={(v) => setPreviewTab(v as "overview" | "json" | "research")} className="mx-auto max-w-4xl">
-              <div className="flex items-center justify-center">
-                <TabsList className="rounded-full">
-                  <TabsTrigger value="overview" className="rounded-full">
+            <Tabs value={previewTab} onValueChange={(v) => setPreviewTab(v as "overview" | "json" | "research")} className="mx-auto max-w-6xl px-4 sm:px-0">
+              <div className="flex items-center justify-center mb-2">
+                <TabsList className="rounded-full w-full sm:w-auto grid grid-cols-2 sm:flex gap-1 p-1">
+                  <TabsTrigger value="overview" className="rounded-full text-xs sm:text-sm px-3 sm:px-4">
                     Overview
                   </TabsTrigger>
-                  <TabsTrigger value="json" className="rounded-full">
+                  <TabsTrigger value="json" className="rounded-full text-xs sm:text-sm px-3 sm:px-4">
                     Full JSON
                   </TabsTrigger>
                   {researchResults && (
-                    <TabsTrigger value="research" className="rounded-full">
+                    <TabsTrigger value="research" className="rounded-full text-xs sm:text-sm px-3 sm:px-4 col-span-2 sm:col-span-1">
                       🔍 Research
-                    </TabsTrigger>
-                  )}
-                  {selectedImageUrl && (
-                    <TabsTrigger value="reference" className="rounded-full">
-                      📸 Reference Image
                     </TabsTrigger>
                   )}
                 </TabsList>
@@ -1583,39 +1712,39 @@ export function NewLeaderApp() {
                 {/* Preview Card */}
                 <div className="overflow-hidden rounded-3xl border border-border/60 bg-card shadow-xl shadow-primary/5">
                   {/* Hero section */}
-                  <div className="relative border-b border-border/40 bg-gradient-to-br from-primary/[0.06] via-transparent to-accent/[0.04] px-8 py-10 sm:px-12 sm:py-14">
-                    <div className="flex flex-col gap-8 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-3">
-                          <h2 className="font-display text-4xl font-medium tracking-tight text-foreground sm:text-5xl">
+                  <div className="relative border-b border-border/40 bg-gradient-to-br from-primary/[0.06] via-transparent to-accent/[0.04] px-4 py-8 sm:px-8 sm:py-12">
+                    <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                          <h2 className="font-display text-3xl font-medium tracking-tight text-foreground sm:text-4xl lg:text-5xl">
                             {identity.name}
                           </h2>
                           {identity.tier && (
-                            <span className="rounded-full bg-primary px-3 py-1 text-sm font-medium text-primary-foreground">
+                            <span className="rounded-full bg-primary px-2.5 py-1 text-xs sm:text-sm font-medium text-primary-foreground">
                               {identity.tier}
                             </span>
                           )}
                         </div>
 
                         {identity.tagline && (
-                          <p className="mt-4 text-lg text-muted-foreground">
+                          <p className="mt-3 sm:mt-4 text-base sm:text-lg text-muted-foreground">
                             {identity.tagline}
                           </p>
                         )}
 
-                        <div className="mt-5 flex flex-wrap items-center gap-3">
+                        <div className="mt-4 sm:mt-5 flex flex-wrap items-center gap-2">
                           {identity.leaderId && (
-                            <code className="rounded-lg bg-foreground/5 px-3 py-1.5 font-mono text-xs text-muted-foreground">
+                            <code className="rounded-lg bg-foreground/5 px-2.5 py-1.5 font-mono text-xs text-muted-foreground">
                               {identity.leaderId}
                             </code>
                           )}
                           {identity.vertical && (
-                            <span className="rounded-full bg-muted px-3 py-1 text-sm text-muted-foreground">
+                            <span className="rounded-full bg-muted px-2.5 py-1 text-xs sm:text-sm text-muted-foreground">
                               {identity.vertical}
                             </span>
                           )}
                           {selectedImageUrl && (
-                            <span className="flex items-center gap-1.5 rounded-full bg-purple-500/10 px-3 py-1 text-sm text-purple-700 dark:text-purple-300">
+                            <span className="flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-xs sm:text-sm text-primary">
                               📸 Reference Enhanced
                             </span>
                           )}
@@ -1623,8 +1752,8 @@ export function NewLeaderApp() {
                       </div>
 
                       {typeof identity.compositeScore === "number" && (
-                        <div className="shrink-0 text-right">
-                          <div className="font-display text-6xl font-medium tabular-nums text-foreground">
+                        <div className="shrink-0 text-left lg:text-right">
+                          <div className="font-display text-5xl sm:text-6xl font-medium tabular-nums text-foreground">
                             {identity.compositeScore}
                           </div>
                           <div className="mt-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
@@ -1637,20 +1766,382 @@ export function NewLeaderApp() {
 
                   {/* Mission Statement */}
                   {identity.missionStatement && (
-                    <div className="border-b border-border/40 px-8 py-8 sm:px-12">
+                    <div className="border-b border-border/40 px-4 py-6 sm:px-8 sm:py-8">
                       <div className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
                         Mission Statement
                       </div>
-                      <p className="max-w-3xl text-base leading-relaxed text-foreground">
+                      <p className="text-sm sm:text-base leading-relaxed text-foreground">
                         {identity.missionStatement}
                       </p>
                     </div>
                   )}
 
+                  {/* Reference Image Used */}
+                  {selectedImageUrl && (
+                    <div className="border-b border-border/40 px-8 py-8 sm:px-12">
+                      <div className="mb-4 flex items-center gap-2">
+                        <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-primary/10">
+                          <span className="text-sm">📸</span>
+                        </div>
+                        <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                          Reference Photo Used for Avatar
+                        </div>
+                      </div>
+                      <div className="flex flex-col sm:flex-row gap-6 items-start">
+                        <div className="relative overflow-hidden rounded-xl border border-border/60 shadow-lg flex-shrink-0">
+                          <img
+                            src={selectedImageUrl}
+                            alt="Reference photo"
+                            className="h-48 w-48 object-cover"
+                          />
+                          <div className="absolute top-2 right-2 rounded-full bg-primary p-1.5 shadow-lg">
+                            <Check className="h-4 w-4 text-primary-foreground" />
+                          </div>
+                        </div>
+                        <div className="flex-1 space-y-3">
+                          <p className="text-sm text-muted-foreground leading-relaxed">
+                            This photo was used as visual reference during avatar generation. The image was passed to the AI model via the <code className="px-1.5 py-0.5 rounded bg-muted text-xs font-mono">image_input</code> parameter, guiding it to create similar facial features, appearance, and style while following the character description.
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-xs text-primary">
+                              <Check className="h-3 w-3" />
+                              Image-to-Image Generation
+                            </span>
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground">
+                              Model: google/imagen-3
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Leadership Scores Breakdown */}
+                  {(() => {
+                    const leaderRoot = parsed as any;
+                    const scores = leaderRoot?.metadata?.leadershipScores;
+                    if (!scores) return null;
+
+                    return (
+                      <div className="border-b border-border/40 px-4 py-6 sm:px-8 sm:py-8">
+                        <div className="mb-5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                          Leadership Scores
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 mb-6">
+                          {typeof scores.character === "number" && (
+                            <div className="rounded-xl border border-border/60 bg-gradient-to-br from-blue-500/5 to-transparent p-4 sm:p-5">
+                              <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">Character</div>
+                              <div className="text-3xl sm:text-4xl font-bold tabular-nums text-foreground">{scores.character}</div>
+                              {scores.scoringReasoning?.character && (
+                                <p className="mt-3 text-xs sm:text-sm text-muted-foreground leading-relaxed line-clamp-3">{scores.scoringReasoning.character}</p>
+                              )}
+                            </div>
+                          )}
+                          {typeof scores.competence === "number" && (
+                            <div className="rounded-xl border border-border/60 bg-gradient-to-br from-purple-500/5 to-transparent p-4 sm:p-5">
+                              <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">Competence</div>
+                              <div className="text-3xl sm:text-4xl font-bold tabular-nums text-foreground">{scores.competence}</div>
+                              {scores.scoringReasoning?.competence && (
+                                <p className="mt-3 text-xs sm:text-sm text-muted-foreground leading-relaxed line-clamp-3">{scores.scoringReasoning.competence}</p>
+                              )}
+                            </div>
+                          )}
+                          {typeof scores.impact === "number" && (
+                            <div className="rounded-xl border border-border/60 bg-gradient-to-br from-amber-500/5 to-transparent p-4 sm:p-5">
+                              <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">Impact</div>
+                              <div className="text-3xl sm:text-4xl font-bold tabular-nums text-foreground">{scores.impact}</div>
+                              {scores.scoringReasoning?.impact && (
+                                <p className="mt-3 text-xs sm:text-sm text-muted-foreground leading-relaxed line-clamp-3">{scores.scoringReasoning.impact}</p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        {typeof scores.jobsRuleMultiplier === "number" && (
+                          <div className="rounded-xl border border-border/60 bg-muted/20 p-4 sm:p-5">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+                              <div className="flex-1">
+                                <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-1">Jobs Rule Multiplier</div>
+                                <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">{scores.scoringReasoning?.jobsRule || "Ethical conduct assessment"}</p>
+                              </div>
+                              <div className="text-2xl sm:text-3xl font-bold tabular-nums text-foreground shrink-0">{scores.jobsRuleMultiplier.toFixed(2)}</div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {/* Expertise Domains */}
+                  {(() => {
+                    const leaderRoot = parsed as any;
+                    const expertise = leaderRoot?.expertiseDomain?.primary;
+                    if (!Array.isArray(expertise) || expertise.length === 0) return null;
+
+                    return (
+                      <div className="border-b border-border/40 px-4 py-6 sm:px-8 sm:py-8">
+                        <div className="mb-4 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                          Areas of Expertise
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {expertise.map((domain: string, i: number) => (
+                            <span key={i} className="rounded-full bg-primary/10 px-3 py-1.5 text-xs sm:text-sm font-medium text-primary">
+                              {domain}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Primary Audience */}
+                  {(() => {
+                    const leaderRoot = parsed as any;
+                    const audience = leaderRoot?.coreIdentity?.primaryAudience;
+                    if (!audience) return null;
+
+                    return (
+                      <div className="border-b border-border/40 px-4 py-6 sm:px-8 sm:py-8">
+                        <div className="mb-4 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                          Primary Audience
+                        </div>
+                        <div className="space-y-5">
+                          {audience.description && (
+                            <p className="text-sm sm:text-base text-foreground leading-relaxed">{audience.description}</p>
+                          )}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {audience.demographics && (
+                              <div className="rounded-lg bg-muted/30 p-4">
+                                <div className="text-xs font-semibold text-muted-foreground mb-2">Demographics</div>
+                                <div className="space-y-1 text-xs sm:text-sm text-foreground">
+                                  {audience.demographics.ageRange && <div>Age: {audience.demographics.ageRange}</div>}
+                                  {audience.demographics.geography && <div>Location: {audience.demographics.geography}</div>}
+                                </div>
+                              </div>
+                            )}
+                            {audience.knowledgeLevel && (
+                              <div className="rounded-lg bg-muted/30 p-4">
+                                <div className="text-xs font-semibold text-muted-foreground mb-2">Knowledge Level</div>
+                                <div className="text-xs sm:text-sm text-foreground font-medium">{audience.knowledgeLevel}</div>
+                              </div>
+                            )}
+                          </div>
+                          {Array.isArray(audience.painPoints) && audience.painPoints.length > 0 && (
+                            <div>
+                              <div className="text-xs font-semibold text-muted-foreground mb-2">Pain Points</div>
+                              <ul className="space-y-1.5">
+                                {audience.painPoints.map((pain: string, i: number) => (
+                                  <li key={i} className="text-xs sm:text-sm text-foreground flex items-start gap-2">
+                                    <span className="text-muted-foreground mt-0.5">•</span>
+                                    <span className="flex-1">{pain}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          {Array.isArray(audience.aspirations) && audience.aspirations.length > 0 && (
+                            <div>
+                              <div className="text-xs font-semibold text-muted-foreground mb-2">Aspirations</div>
+                              <ul className="space-y-1.5">
+                                {audience.aspirations.map((asp: string, i: number) => (
+                                  <li key={i} className="text-xs sm:text-sm text-foreground flex items-start gap-2">
+                                    <span className="text-muted-foreground mt-0.5">•</span>
+                                    <span className="flex-1">{asp}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Personality & Traits */}
+                  {(() => {
+                    const leaderRoot = parsed as any;
+                    const personality = leaderRoot?.personalityMatrix;
+                    if (!personality) return null;
+
+                    return (
+                      <div className="border-b border-border/40 px-4 py-6 sm:px-8 sm:py-8">
+                        <div className="mb-4 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                          Personality & Core Traits
+                        </div>
+                        <div className="space-y-4">
+                          {personality.personalityType && (
+                            <p className="text-sm sm:text-base text-foreground leading-relaxed">{personality.personalityType}</p>
+                          )}
+                          {Array.isArray(personality.coreTraits) && personality.coreTraits.length > 0 && (
+                            <div className="flex flex-wrap gap-2">
+                              {personality.coreTraits.map((trait: string, i: number) => (
+                                <span key={i} className="rounded-full bg-muted px-3 py-1.5 text-xs sm:text-sm text-muted-foreground border border-border/60">
+                                  {trait}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Values & Worldview */}
+                  {(() => {
+                    const leaderRoot = parsed as any;
+                    const values = leaderRoot?.valuesWorldview;
+                    if (!values) return null;
+
+                    return (
+                      <div className="border-b border-border/40 px-4 py-6 sm:px-8 sm:py-8">
+                        <div className="mb-4 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                          Values & Worldview
+                        </div>
+                        <div className="space-y-4">
+                          {values.worldviewSummary && (
+                            <p className="text-sm sm:text-base text-foreground leading-relaxed">{values.worldviewSummary}</p>
+                          )}
+                          {Array.isArray(values.coreBeliefs) && values.coreBeliefs.length > 0 && (
+                            <div>
+                              <div className="text-xs font-semibold text-muted-foreground mb-2">Core Beliefs</div>
+                              <ul className="space-y-2">
+                                {values.coreBeliefs.map((belief: string, i: number) => (
+                                  <li key={i} className="text-xs sm:text-sm text-foreground flex items-start gap-2">
+                                    <span className="text-primary mt-0.5">•</span>
+                                    <span className="flex-1">{belief}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Communication Style */}
+                  {(() => {
+                    const leaderRoot = parsed as any;
+                    const comm = leaderRoot?.communicationStyle?.voice;
+                    if (!comm) return null;
+
+                    return (
+                      <div className="border-b border-border/40 px-4 py-6 sm:px-8 sm:py-8">
+                        <div className="mb-4 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                          Communication Style
+                        </div>
+                        <div className="space-y-5">
+                          {comm.summary && (
+                            <p className="text-sm sm:text-base text-foreground leading-relaxed">{comm.summary}</p>
+                          )}
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {Array.isArray(comm.doSay) && comm.doSay.length > 0 && (
+                              <div className="rounded-lg bg-green-500/5 border border-green-500/20 p-4">
+                                <div className="text-xs font-semibold text-green-600 dark:text-green-400 mb-3">✓ Do Say</div>
+                                <ul className="space-y-2">
+                                  {comm.doSay.slice(0, 5).map((phrase: string, i: number) => (
+                                    <li key={i} className="text-xs sm:text-sm text-foreground leading-relaxed">{phrase}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                            {Array.isArray(comm.dontSay) && comm.dontSay.length > 0 && (
+                              <div className="rounded-lg bg-red-500/5 border border-red-500/20 p-4">
+                                <div className="text-xs font-semibold text-red-600 dark:text-red-400 mb-3">✗ Don't Say</div>
+                                <ul className="space-y-2">
+                                  {comm.dontSay.slice(0, 5).map((phrase: string, i: number) => (
+                                    <li key={i} className="text-xs sm:text-sm text-foreground leading-relaxed">{phrase}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+                          {Array.isArray(comm.catchphrases) && comm.catchphrases.length > 0 && (
+                            <div>
+                              <div className="text-xs font-semibold text-muted-foreground mb-2">Catchphrases</div>
+                              <div className="flex flex-wrap gap-2">
+                                {comm.catchphrases.map((phrase: string, i: number) => (
+                                  <span key={i} className="rounded-lg bg-primary/5 border border-primary/20 px-3 py-1.5 text-xs sm:text-sm text-foreground italic">
+                                    "{phrase}"
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Visual Identity */}
+                  {(() => {
+                    const leaderRoot = parsed as any;
+                    const visual = leaderRoot?.visualIdentity;
+                    if (!visual) return null;
+
+                    return (
+                      <div className="border-b border-border/40 px-4 py-6 sm:px-8 sm:py-8">
+                        <div className="mb-4 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                          Visual Identity
+                        </div>
+                        <div className="space-y-5">
+                          {visual.physicalDescription && (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                              {visual.physicalDescription.apparentAge && (
+                                <div><span className="text-xs text-muted-foreground">Age:</span> <span className="text-sm text-foreground ml-1">{visual.physicalDescription.apparentAge}</span></div>
+                              )}
+                              {visual.physicalDescription.genderPresentation && (
+                                <div><span className="text-xs text-muted-foreground">Gender:</span> <span className="text-sm text-foreground ml-1">{visual.physicalDescription.genderPresentation}</span></div>
+                              )}
+                              {visual.physicalDescription.ethnicity && (
+                                <div><span className="text-xs text-muted-foreground">Ethnicity:</span> <span className="text-sm text-foreground ml-1">{visual.physicalDescription.ethnicity}</span></div>
+                              )}
+                              {visual.physicalDescription.buildBodyType && (
+                                <div><span className="text-xs text-muted-foreground">Build:</span> <span className="text-sm text-foreground ml-1">{visual.physicalDescription.buildBodyType}</span></div>
+                              )}
+                            </div>
+                          )}
+                          {visual.visualStyle?.colorPalette && (
+                            <div>
+                              <div className="text-xs font-semibold text-muted-foreground mb-3">Color Palette</div>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                {Array.isArray(visual.visualStyle.colorPalette.primary) && visual.visualStyle.colorPalette.primary.length > 0 && (
+                                  <div>
+                                    <div className="text-xs text-muted-foreground mb-2">Primary</div>
+                                    <div className="flex flex-wrap gap-2">
+                                      {visual.visualStyle.colorPalette.primary.map((color: any, i: number) => (
+                                        <div key={i} className="flex items-center gap-2">
+                                          <div className="h-6 w-6 rounded-full border border-border/60 shadow-sm" style={{ backgroundColor: color.hex }} />
+                                          <span className="text-xs text-foreground">{color.name}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                                {Array.isArray(visual.visualStyle.colorPalette.accent) && visual.visualStyle.colorPalette.accent.length > 0 && (
+                                  <div>
+                                    <div className="text-xs text-muted-foreground mb-2">Accent</div>
+                                    <div className="flex flex-wrap gap-2">
+                                      {visual.visualStyle.colorPalette.accent.map((color: any, i: number) => (
+                                        <div key={i} className="flex items-center gap-2">
+                                          <div className="h-6 w-6 rounded-full border border-border/60 shadow-sm" style={{ backgroundColor: color.hex }} />
+                                          <span className="text-xs text-foreground">{color.name}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   {/* Data summary */}
-                  <div className="bg-muted/20 px-8 py-6 sm:px-12">
-                    <div className="flex flex-wrap items-center justify-between gap-4">
-                      <div className="flex items-center gap-6 text-sm text-muted-foreground">
+                  <div className="bg-muted/20 px-4 py-5 sm:px-8 sm:py-6">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex flex-wrap items-center gap-3 sm:gap-6 text-xs sm:text-sm text-muted-foreground">
                         <span>
                           <span className="font-medium text-foreground">
                             {Object.keys(parsed as object).filter(k => k !== "$schema").length}
@@ -1661,7 +2152,7 @@ export function NewLeaderApp() {
                           <span className="font-medium text-foreground">
                             {raw.length.toLocaleString()}
                           </span>{" "}
-                          characters
+                          chars
                         </span>
                         {researchResults && (
                           <span className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
@@ -1669,24 +2160,25 @@ export function NewLeaderApp() {
                           </span>
                         )}
                         {selectedImageUrl && (
-                          <span className="flex items-center gap-1 text-xs text-purple-600 dark:text-purple-400">
+                          <span className="flex items-center gap-1 text-xs text-primary">
                             <span>📸</span> Image enhanced
                           </span>
                         )}
                       </div>
 
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                         <Button
                           variant="outline"
-                          className="gap-2 rounded-full"
+                          size="sm"
+                          className="gap-2 rounded-full text-xs sm:text-sm"
                           onClick={() => setPreviewTab("json")}
                         >
-                          <FileJson2 className="h-4 w-4" />
+                          <FileJson2 className="h-3 w-3 sm:h-4 sm:w-4" />
                           View full JSON
                         </Button>
                         <Button
                           size="lg"
-                          className="gap-2 rounded-full px-8"
+                          className="gap-2 rounded-full px-6 sm:px-8 text-sm sm:text-base"
                           disabled={!canSave || saving}
                           onClick={handleSave}
                         >
@@ -1698,7 +2190,7 @@ export function NewLeaderApp() {
                           ) : (
                             <>
                               Save to Gallery
-                              <ArrowRight className="h-4 w-4" />
+                              <ArrowRight className="h-3 w-3 sm:h-4 sm:w-4" />
                             </>
                           )}
                         </Button>
@@ -1893,52 +2385,6 @@ export function NewLeaderApp() {
                           </ul>
                         </div>
                       )}
-                    </div>
-                  </div>
-                )}
-              </TabsContent>
-
-              <TabsContent value="reference" className="mt-6">
-                {selectedImageUrl && (
-                  <div className="overflow-hidden rounded-3xl border border-border/60 bg-card">
-                    <div className="border-b border-border/40 bg-gradient-to-br from-purple-500/[0.06] via-transparent to-purple-600/[0.04] px-5 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-500/10">
-                          <span className="text-xl">📸</span>
-                        </div>
-                        <div>
-                          <h3 className="font-medium text-foreground">Reference Photo Used</h3>
-                          <p className="text-xs text-muted-foreground">
-                            This photo was used as visual reference for avatar generation
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="p-6">
-                      <div className="flex justify-center">
-                        <div className="relative overflow-hidden rounded-2xl border-2 border-border/60 shadow-lg">
-                          <img
-                            src={selectedImageUrl}
-                            alt="Selected reference"
-                            className="max-h-[500px] w-auto object-contain"
-                          />
-                        </div>
-                      </div>
-                      <div className="mt-6 rounded-xl bg-muted/30 p-4">
-                        <div className="flex items-start gap-3">
-                          <div className="mt-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-purple-500/10">
-                            <Check className="h-3 w-3 text-purple-600 dark:text-purple-400" />
-                          </div>
-                          <div className="flex-1">
-                            <p className="text-sm font-medium text-foreground">
-                              Enhanced with reference image
-                            </p>
-                            <p className="mt-1 text-xs text-muted-foreground">
-                              The AI avatar was generated using this photo as visual reference to enhance similarity and realism. The prompt was augmented with "similar appearance and style to reference photo" to guide the image generation model.
-                            </p>
-                          </div>
-                        </div>
-                      </div>
                     </div>
                   </div>
                 )}

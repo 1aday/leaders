@@ -14,6 +14,7 @@ type Body = {
   description?: string;
   webSearch?: boolean;
   findReferencePhotos?: boolean;
+  selectedImageUrl?: string; // Pre-selected image URL
 };
 
 export async function POST(req: Request) {
@@ -23,14 +24,18 @@ export async function POST(req: Request) {
     const description = typeof body.description === "string" ? body.description : undefined;
     const webSearch = body.webSearch === true;
     const findReferencePhotos = body.findReferencePhotos === true;
+    const preSelectedImageUrl = typeof body.selectedImageUrl === "string" ? body.selectedImageUrl : undefined;
+
+    console.log("[Generate API] 📥 Request received:");
+    console.log("[Generate API]   - name:", name);
+    console.log("[Generate API]   - webSearch:", webSearch);
+    console.log("[Generate API]   - findReferencePhotos:", findReferencePhotos);
+    console.log("[Generate API]   - selectedImageUrl:", preSelectedImageUrl || 'NONE');
 
     // Create a TransformStream for Server-Sent Events
     const { readable, writable } = new TransformStream();
     const writer = writable.getWriter();
     const encoder = new TextEncoder();
-
-    // Generate session ID for image selection cache
-    const genStartTime = Date.now();
 
     // Helper to send SSE messages
     const sendSSE = (type: string, data: Record<string, unknown>) => {
@@ -177,40 +182,10 @@ export async function POST(req: Request) {
           }
         }
 
-        // STAGE 1.5: Wait for image selection if images were found
-        let selectedImageUrl: string | null = null;
-        if (referenceImages.length > 0) {
-          sendSSE("stage", {
-            stage: "image_selection",
-            message: "Waiting for image selection...",
-          });
-
-          // Poll for selection with timeout (60 seconds)
-          const selectionDeadline = Date.now() + 60_000;
-          while (Date.now() < selectionDeadline) {
-            try {
-              const selectionRes = await fetch(
-                `${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/api/leader/select-image?sessionId=${genStartTime}`,
-                { cache: "no-store" }
-              );
-
-              if (selectionRes.ok) {
-                const selectionData = await selectionRes.json();
-                selectedImageUrl = selectionData.imageUrl;
-                console.log(`[Generation] User selected image:`, selectedImageUrl ?? "skipped");
-                break;
-              }
-            } catch (e) {
-              // Selection not ready yet, continue polling
-            }
-
-            // Wait 500ms before next poll
-            await new Promise(r => setTimeout(r, 500));
-          }
-
-          if (selectedImageUrl === null && Date.now() >= selectionDeadline) {
-            console.warn("[Generation] Image selection timed out, continuing without reference");
-          }
+        // Use pre-selected image URL if provided (images were selected before generation started)
+        const selectedImageUrl = preSelectedImageUrl || null;
+        if (selectedImageUrl) {
+          console.log(`[Generation] Using pre-selected image:`, selectedImageUrl);
         }
 
         // STAGE 2: Generate Leader Bible JSON
@@ -239,64 +214,62 @@ export async function POST(req: Request) {
           },
         });
 
+        console.log("[Generate] Leader Bible generation complete, starting persistence and avatar generation");
+
         // Best-effort persistence
         try {
           await upsertLeaderFromJson({ leaderJson: result.leader, model: result.model });
+          console.log("[Generate] Leader persisted to database");
         } catch (e) {
           console.warn("[Supabase] Failed to persist leader generation:", e);
         }
 
-        // Auto-generate avatar (best-effort, don't block completion)
-        (async () => {
-          try {
-            // Extract leaderId from generated JSON
-            if (typeof result.leader !== 'string') return;
-            const parsed = JSON.parse(result.leader) as unknown;
-            const metadata = parsed && typeof parsed === "object" && "metadata" in (parsed as Record<string, unknown>)
-              ? (parsed as Record<string, unknown>).metadata
+        // Extract leaderId and leaderJson for avatar generation
+        console.log("[Generate] Extracting leaderId from result...");
+        console.log("[Generate] result.leader type:", typeof result.leader);
+        let leaderId: string | null = null;
+        let leaderJson: unknown = null;
+
+        try {
+          // Handle both string and object cases
+          if (typeof result.leader === 'string') {
+            leaderJson = JSON.parse(result.leader);
+          } else if (typeof result.leader === 'object' && result.leader !== null) {
+            leaderJson = result.leader;
+          }
+
+          if (leaderJson && typeof leaderJson === "object") {
+            const metadata = "metadata" in (leaderJson as Record<string, unknown>)
+              ? (leaderJson as Record<string, unknown>).metadata
               : null;
-            const leaderId = metadata && typeof metadata === "object" && "leaderId" in (metadata as Record<string, unknown>)
+            leaderId = metadata && typeof metadata === "object" && "leaderId" in (metadata as Record<string, unknown>)
               ? String((metadata as Record<string, unknown>).leaderId).replace(/\s+/g, "-").toUpperCase()
               : null;
-
-            if (!leaderId) {
-              console.warn("[Avatar] Cannot auto-generate: no leaderId in generated JSON");
-              return;
-            }
-
-            // Call avatar API with reference image if selected
-            const avatarRes = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/api/avatar`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                leaderRawJson: result.leader,
-                leaderId,
-                aspectRatio: "1:1",
-                outputFormat: "png",
-                isRegeneration: false,
-                referenceImageUrl: selectedImageUrl ?? undefined,
-              }),
-            });
-
-            if (!avatarRes.ok) {
-              const err = await avatarRes.json().catch(() => ({}));
-              console.warn("[Avatar] Auto-generation failed:", err);
-            } else {
-              console.log("[Avatar] Auto-generated successfully for", leaderId);
-            }
-          } catch (err) {
-            console.warn("[Avatar] Auto-generation error:", err);
+            console.log(`[Generate] ✅ Extracted leaderId: ${leaderId}`);
+          } else {
+            console.warn("[Generate] ⚠️  Could not extract leaderJson");
           }
-        })();
+        } catch (e) {
+          console.error("[Generate] ❌ Failed to extract leaderId:", e);
+        }
 
-        // Send final result with timing metrics
-        const sseData = `data: ${JSON.stringify({
-          type: "complete",
+        console.log(`[Generate] 📊 Final values before sending complete event:`);
+        console.log(`[Generate]   - leaderId: ${leaderId}`);
+        console.log(`[Generate]   - leaderJson exists: ${!!leaderJson}`);
+        console.log(`[Generate]   - selectedImageUrl: ${preSelectedImageUrl}`);
+
+        // Send complete event with leaderId and selectedImageUrl for frontend to trigger avatar generation
+        sendSSE("complete", {
           leader: result.leader,
           model: result.model,
           timing: result.timing,
-        })}\n\n`;
-        writer.write(encoder.encode(sseData));
+          leaderId: leaderId || null,
+          selectedImageUrl: preSelectedImageUrl || null,
+        });
+
+        console.log(`[Generate] ✅ Complete event sent`);
+        console.log(`[Generate]   - Sent leaderId: ${leaderId || 'NULL'}`);
+        console.log(`[Generate]   - Sent selectedImageUrl: ${preSelectedImageUrl || 'NULL'}`);
         writer.close();
       } catch (error) {
         const msg = error instanceof Error ? error.message : "Unknown error";

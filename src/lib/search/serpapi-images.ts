@@ -33,7 +33,6 @@ export async function fetchReferenceImages(
       engine: "google_images",
       q: query,
       api_key: apiKey,
-      imgar: "s", // Square aspect ratio
       imgsz: "l", // Large images
       num: "20", // Fetch 20 images (SerpAPI returns up to 100)
       gl: "ca", // Search from Canada
