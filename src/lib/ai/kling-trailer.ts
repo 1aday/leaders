@@ -223,7 +223,7 @@ export async function generateKlingTrailerPromptWithOpenAI(opts: {
     "",
     "Task:",
     "- Produce a single paragraph prompt for a talking-head intro video where the main point is what this person says.",
-    "- Dialogue: include exactly ONE spoken line in quotes. It MUST say who this person is + what this person helps with, in first-person, and include the phrase 'I help you' or 'I help people'. Use voice/doSay/catchphrases/mission to match their tone.",
+    "- Dialogue: include exactly ONE spoken line in quotes. Format: 'I'm a [WHO] and I help you [WHAT]' or 'I help you [WHAT]' (8-16 words). WHO = their role/identity (from tagline/positioning). WHAT = what they help people DO or ACHIEVE (from mission/expertise/positioning), NOT just their title. Use voice/doSay/catchphrases/mission to match their tone.",
     "- Performance: specify tone, pacing, and expression so lip-sync feels natural (e.g., calm, confident, warm; direct-to-camera). If spokenAccent is provided, incorporate it naturally (e.g., 'speaking English with a subtle Japanese accent').",
     "- Visuals: keep the scene minimal and non-distracting. ONLY if it clearly supports the expertise, include at most 1–2 abstract visual aids behind/around this person (examples: bitcoin → warm gold coin motif / abstract ledger glow; finance → faint chart-line light patterns; healthcare → abstract pulse waveform light). No readable text/logos.",
     "- Camera/lighting: keep it simple (stable framing; gentle push-in or slight orbit). No technical jargon.",
@@ -353,8 +353,25 @@ export function buildKlingTrailerPrompt(opts: { leaderJson: unknown; leaderId?: 
     if (d0 && /\bi help\b/i.test(d0)) return d0;
     if (c0 && /\bi help\b/i.test(c0)) return c0;
 
-    // Fall back to a conservative, useful line.
-    if (t && t.split(/\s+/).length <= 12) return `I help you with ${t.toLowerCase()}.`;
+    // Fall back: construct a help statement from positioning/vertical, NOT tagline
+    // Tagline describes WHO they are, not what they help with
+    const positioning = pickString(core, "positioning");
+    const vertical = pickString(meta, "vertical");
+
+    if (t && t.split(/\s+/).length <= 8) {
+      // Use tagline to describe WHO, then add generic help statement
+      return `I'm a ${t.toLowerCase()}. I help you make confident, informed decisions.`;
+    }
+
+    // Use positioning or vertical to describe WHAT they help with
+    if (positioning && positioning.split(/\s+/).length <= 12) {
+      return `I help you ${positioning.toLowerCase()}.`;
+    }
+
+    if (vertical && vertical.split(/\s+/).length <= 3) {
+      return `I help you navigate ${vertical.toLowerCase()} with clarity and confidence.`;
+    }
+
     return "I help you get clarity and take the next best step.";
   })();
 

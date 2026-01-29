@@ -1,6 +1,7 @@
 import "server-only";
 import { openai } from "@/lib/ai/openai-client";
 import { LEADER_SCHEMA_RESPONSES } from "@/lib/ai/leader-schema-responses";
+import type { ResearchResult } from "@/lib/ai/leader-research";
 
 type AnyRecord = Record<string, unknown>;
 
@@ -79,6 +80,7 @@ function extractFamousPersonName(name: string, description: string): { detectedN
 export type GenerateLeaderBibleInput = {
   name?: string;
   description?: string;
+  research?: ResearchResult;
   onProgress?: (data: { tokens: number; estimatedTotal: number; percentage: number }) => void;
 };
 
@@ -1006,7 +1008,8 @@ export async function generateLeaderBibleWithOpenAI(input: GenerateLeaderBibleIn
 
   let name = typeof input.name === "string" ? input.name.trim() : "";
   let description = typeof input.description === "string" ? input.description.trim() : "";
-  
+  const research = input.research;
+
   // If no input provided, generate a random aligned leader
   const isRandom = !name && !description;
 
@@ -1334,6 +1337,76 @@ Cultural Name Matching & Demographic Diversity:
 
 Return the complete JSON matching the schema.`;
 
+  // If research was provided, inject it into the system prompt
+  let enhancedSystem = system;
+  if (research && name) {
+    enhancedSystem += `\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+    enhancedSystem += `## 🔍 WEB SEARCH RESEARCH CONTEXT - USE THIS INFORMATION!\n`;
+    enhancedSystem += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+    enhancedSystem += `**🚨 CRITICAL INSTRUCTION - READ THIS FIRST 🚨**\n\n`;
+    enhancedSystem += `The following information was gathered from live web search (as of ${date}) about ${name}.\n\n`;
+    enhancedSystem += `**YOUR TASK**: Use BOTH this web research data AND your own knowledge to create the Full Leader JSON.\n\n`;
+    enhancedSystem += `**HOW TO USE THIS DATA**:\n`;
+    enhancedSystem += `1. ✅ START with the research facts below as your PRIMARY source\n`;
+    enhancedSystem += `2. ✅ ENHANCE with your own knowledge about this person's background, philosophy, and approach\n`;
+    enhancedSystem += `3. ✅ SYNTHESIZE both sources to create a rich, accurate, and comprehensive Leader Bible\n`;
+    enhancedSystem += `4. ❌ DO NOT ignore the research data - it contains current facts (as of ${date})\n`;
+    enhancedSystem += `5. ❌ DO NOT make up details that contradict the verified research below\n`;
+    enhancedSystem += `6. ❌ DO NOT rely ONLY on research - add depth from your training knowledge\n\n`;
+    enhancedSystem += `**EXAMPLE**: If research says "Bank of England Governor (2013-2020)", you should:\n`;
+    enhancedSystem += `- ✅ Use this FACT in the profile (coreIdentity, career history, achievements)\n`;
+    enhancedSystem += `- ✅ ADD context from your knowledge (policies implemented, economic philosophy, leadership style)\n`;
+    enhancedSystem += `- ✅ COMBINE both for mission statement (e.g., "Former Bank of England Governor focused on climate finance and monetary stability")\n\n`;
+
+    if (research.keyFacts.length > 0) {
+      enhancedSystem += `**📋 Key Facts (Current as of ${date}):**\n${research.keyFacts.map((f, i) => `${i + 1}. ${f}`).join("\n")}\n\n`;
+    }
+
+    if (research.notableAchievements.length > 0) {
+      enhancedSystem += `**🏆 Notable Achievements:**\n${research.notableAchievements.map((a, i) => `${i + 1}. ${a}`).join("\n")}\n\n`;
+    }
+
+    if (research.expertise.length > 0) {
+      enhancedSystem += `**💼 Areas of Expertise:**\n${research.expertise.map((e, i) => `${i + 1}. ${e}`).join("\n")}\n\n`;
+    }
+
+    if (research.controversies && research.controversies.length > 0) {
+      enhancedSystem += `**⚠️ Controversies/Criticisms:**\n${research.controversies.map((c, i) => `${i + 1}. ${c}`).join("\n")}\n\n`;
+    }
+
+    if (research.sources.length > 0) {
+      enhancedSystem += `**📚 Sources:**\n${research.sources.map((s, i) => `${i + 1}. ${s.title} - ${s.url}`).join("\n")}\n\n`;
+    }
+
+    enhancedSystem += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+    enhancedSystem += `## 🎯 MANDATORY INTEGRATION REQUIREMENTS:\n`;
+    enhancedSystem += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+    enhancedSystem += `You MUST use the research data above to populate these sections:\n\n`;
+    enhancedSystem += `1. **coreIdentity.name**: Use the exact name from research (${name})\n`;
+    enhancedSystem += `2. **coreIdentity.basedOnFamousPerson**: MUST be TRUE (this is a real person with web research)\n`;
+    enhancedSystem += `3. **coreIdentity.missionStatement**: Reflect their ACTUAL current role and work from Key Facts\n`;
+    enhancedSystem += `4. **coreIdentity.tagline**: Based on their CURRENT position (check Key Facts for latest role)\n`;
+    enhancedSystem += `5. **metadata.leadershipScores**: Scores must reflect documented achievements and controversies\n`;
+    enhancedSystem += `6. **expertiseDomain**: Use documented expertise areas from research\n`;
+    enhancedSystem += `7. **backstory.creationStory**: Mention this profile is based on current web research as of ${date}\n`;
+    enhancedSystem += `8. **valuesWorldview.strongOpinions**: Include positions mentioned in research\n`;
+    enhancedSystem += `9. **contentPillars**: Align with their actual areas of work and expertise\n\n`;
+    enhancedSystem += `**INTEGRATION EXAMPLE**: If research shows "Prime Minister of Canada (2025-present)", then:\n`;
+    enhancedSystem += `- ✅ tagline: Use BOTH research (PM role) AND your knowledge (policy focus) → "Canadian Prime Minister Leading Economic Recovery and Climate Action"\n`;
+    enhancedSystem += `- ✅ missionStatement: Combine current role with known leadership philosophy\n`;
+    enhancedSystem += `- ✅ expertiseDomain: Merge research expertise with your understanding of their background\n`;
+    enhancedSystem += `- ✅ leadershipScores: Score based on BOTH documented achievements AND known track record\n`;
+    enhancedSystem += `- ✅ career highlights: Include research facts PLUS additional context from your knowledge\n\n`;
+    enhancedSystem += `🎯 **FINAL REMINDER**: Create a RICH, COMPREHENSIVE Leader Bible by:\n`;
+    enhancedSystem += `- Using the web research facts as the FOUNDATION (current, verified data)\n`;
+    enhancedSystem += `- Enhancing with YOUR knowledge (background, philosophy, leadership style, historical context)\n`;
+    enhancedSystem += `- Producing a profile that is BOTH factually accurate AND deeply insightful\n\n`;
+    enhancedSystem += `🚫 **NEVER**: Ignore research data OR create a shallow profile that only uses research without depth.\n`;
+    enhancedSystem += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+    console.log(`[Leader Gen] Injected research context: ${research.keyFacts.length} facts, ${research.sources.length} sources`);
+  }
+
   // Use Responses API with structured output for guaranteed schema compliance
   const stream = await openai.responses.create({
     model,
@@ -1341,7 +1414,7 @@ Return the complete JSON matching the schema.`;
     input: [
       {
         role: "system",
-        content: [{ type: "input_text", text: system }],
+        content: [{ type: "input_text", text: enhancedSystem }],
       },
       {
         role: "user",

@@ -3,6 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import ReactMarkdown from "react-markdown";
 import {
   ArrowLeft,
   ArrowRight,
@@ -165,15 +166,27 @@ export function NewLeaderApp() {
   const [showGenerator, setShowGenerator] = React.useState(false);
   const [genName, setGenName] = React.useState("");
   const [genDescription, setGenDescription] = React.useState("");
+  const [webSearchEnabled, setWebSearchEnabled] = React.useState(false);
   const [generating, setGenerating] = React.useState(false);
   const [generatingMode, setGeneratingMode] = React.useState<"random" | "custom" | null>(null);
   const [genError, setGenError] = React.useState<string | null>(null);
   const [genProgress, setGenProgress] = React.useState(0);
   const [maxGenProgress, setMaxGenProgress] = React.useState(0);
   const [genStage, setGenStage] = React.useState<"waiting" | "streaming" | null>(null);
+  const [researchStage, setResearchStage] = React.useState<{
+    active: boolean;
+    sourcesFound: number;
+    message: string;
+  } | null>(null);
+  const [researchResults, setResearchResults] = React.useState<{
+    keyFacts: string[];
+    achievements: string[];
+    expertise: string[];
+    sources: Array<{ title: string; url: string }>;
+  } | null>(null);
   const [genStartTime, setGenStartTime] = React.useState<number | null>(null);
   const [elapsedTime, setElapsedTime] = React.useState(0);
-  const [previewTab, setPreviewTab] = React.useState<"overview" | "json">("overview");
+  const [previewTab, setPreviewTab] = React.useState<"overview" | "json" | "research">("overview");
   const [editingJson, setEditingJson] = React.useState(false);
 
   // Smooth interpolated progress (animates towards genProgress)
@@ -257,38 +270,91 @@ export function NewLeaderApp() {
 
 
   const handleGenerate = React.useCallback(async (forceRandom = false) => {
+    console.log('[GENERATE] ===== BUTTON CLICKED =====');
+    console.log('[GENERATE] forceRandom:', forceRandom);
+    console.log('[GENERATE] generating state BEFORE:', generating);
+    console.log('[GENERATE] generatingMode BEFORE:', generatingMode);
+
     setGenError(null);
     setGenProgress(0);
     setDisplayProgress(0);
     setMaxGenProgress(0);
     setGenStage("waiting");
+    setResearchStage(null);
+    setResearchResults(null);
     setGenStartTime(Date.now());
     const name = forceRandom ? "" : genName.trim();
     const description = forceRandom ? "" : genDescription.trim();
+    const useWebSearch = !forceRandom && webSearchEnabled && name.length > 0;
+
+    console.log('[GENERATE] name:', name);
+    console.log('[GENERATE] useWebSearch:', useWebSearch);
+    console.log('[GENERATE] webSearchEnabled:', webSearchEnabled);
 
     setGenerating(true);
     setGeneratingMode(forceRandom ? "random" : "custom");
 
+    console.log('[GENERATE] State set, about to start fetch...');
+
+    // Simulate research progress if web search enabled
+    let researchProgressInterval: NodeJS.Timeout | null = null;
+    if (useWebSearch) {
+      console.log('[UI] Web search enabled, initializing research stage');
+      // Initialize research stage immediately so progress bar shows
+      setResearchStage({
+        active: true,
+        sourcesFound: 0,
+        message: `Researching ${name} on the web...`,
+      });
+      console.log('[UI] Research stage initialized, starting progress simulation');
+
+      let simulatedProgress = 0;
+      researchProgressInterval = setInterval(() => {
+        // Gradually increase to 45% over ~35 seconds
+        // Slower at start, faster in middle, slower near end
+        simulatedProgress += Math.random() * 2;
+        if (simulatedProgress > 45) simulatedProgress = 45;
+        setGenProgress(simulatedProgress);
+        console.log('[UI] Simulated progress:', simulatedProgress);
+      }, 500);
+      console.log('[UI] Interval created with ID:', researchProgressInterval);
+    }
+
     try {
+      console.log('[GENERATE] Starting fetch to /api/leader/generate');
+      console.log('[GENERATE] Request body:', { name, description, webSearch: useWebSearch });
+
       const res = await fetch("/api/leader/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, description }),
+        body: JSON.stringify({ name, description, webSearch: useWebSearch }),
       });
+
+      console.log('[GENERATE] Fetch completed, status:', res.status);
 
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
       }
 
+      console.log('[GENERATE] Getting reader from response body...');
       const reader = res.body?.getReader();
+      console.log('[GENERATE] Reader obtained:', reader ? 'YES' : 'NO');
       if (!reader) throw new Error("No response body");
 
+      console.log('[GENERATE] Starting SSE stream reading...');
       const decoder = new TextDecoder();
       let buffer = "";
+      let chunkCount = 0;
+      let streamComplete = false;
 
-      while (true) {
+      while (true && !streamComplete) {
         const { done, value } = await reader.read();
-        if (done) break;
+        chunkCount++;
+        console.log('[GENERATE] Chunk', chunkCount, '- done:', done, ', bytes:', value?.length);
+        if (done) {
+          console.log('[GENERATE] Stream ended after', chunkCount, 'chunks');
+          break;
+        }
 
         buffer += decoder.decode(value, { stream: true });
 
@@ -296,6 +362,8 @@ export function NewLeaderApp() {
         const messages = buffer.split("\n\n");
         // Keep the last incomplete message in the buffer
         buffer = messages.pop() || "";
+
+        console.log('[GENERATE] Chunk has', messages.length, 'complete messages');
 
         for (const message of messages) {
           const lines = message.split("\n");
@@ -308,24 +376,157 @@ export function NewLeaderApp() {
               if (!jsonStr) continue;
 
               try {
-                const json = JSON.parse(jsonStr) as { type: string; percentage?: number; leader?: unknown; error?: string };
+                const json = JSON.parse(jsonStr) as {
+                  type: string;
+                  percentage?: number;
+                  leader?: unknown;
+                  error?: string;
+                  stage?: string;
+                  message?: string;
+                  sourcesFound?: number;
+                  keyFacts?: string[];
+                  achievements?: string[];
+                  expertise?: string[];
+                  sources?: Array<{ title: string; url: string }>;
+                  rawSummary?: string;
+                };
 
-                if (json.type === "progress") {
-                  const percentage = Math.min(99, Math.max(0, Math.round(json.percentage || 0)));
+                console.log('[SSE] Message type:', json.type);
 
-                  // Only move progress forward (never backwards) for smooth UX
-                  setMaxGenProgress((prev) => {
-                    const newMax = Math.max(prev, percentage);
-                    setGenProgress(newMax);
-                    console.log(`[Progress] ${newMax}%`);
-                    return newMax;
-                  });
+                if (json.type === "stage") {
+                  console.log('[UI] Stage message received:', json);
+                  // Handle stage transitions
+                  if (json.stage === "research") {
+                    console.log('[UI] Setting research stage to active');
+                    setResearchStage({
+                      active: true,
+                      sourcesFound: 0,
+                      message: json.message || "Researching...",
+                    });
+                  } else if (json.stage === "generation") {
+                    console.log('[UI] Transitioning to generation stage');
+                    // Clear research progress simulation
+                    if (researchProgressInterval) {
+                      clearInterval(researchProgressInterval);
+                      researchProgressInterval = null;
+                    }
 
-                  // Transition to streaming stage once we get real progress
-                  if (percentage > 1) {
+                    if (researchStage) {
+                      setResearchStage({
+                        ...researchStage,
+                        active: false,
+                      });
+                    }
                     setGenStage("streaming");
                   }
+                } else if (json.type === "research_complete") {
+                  console.log('[UI] Research complete, showing 100%', json);
+                  // Clear research progress simulation
+                  if (researchProgressInterval) {
+                    clearInterval(researchProgressInterval);
+                    researchProgressInterval = null;
+                  }
+
+                  // Show research at 100% completion
+                  setGenProgress(50);
+
+                  // Research completion with results
+                  const sourcesCount = json.sourcesFound || json.sources?.length || 0;
+                  console.log('[UI] Sources found:', sourcesCount);
+                  setResearchStage((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          active: false, // Mark as inactive but keep data for display
+                          sourcesFound: sourcesCount,
+                          message: json.message || `Research complete`,
+                        }
+                      : null
+                  );
+
+                  // Store research results - parse rawSummary if available
+                  let keyFacts = json.keyFacts || [];
+                  let achievements = json.achievements || [];
+                  let expertise = json.expertise || [];
+
+                  // CLIENT-SIDE PARSER for rawSummary
+                  if (json.rawSummary && (keyFacts.length === 0 || achievements.length === 0)) {
+                    const lines = json.rawSummary.split('\n');
+                    let section: string | null = null;
+                    let item = "";
+
+                    const save = () => {
+                      const cleaned = item.trim();
+                      if (cleaned.length >= 30) {
+                        if (section === "facts") keyFacts.push(cleaned);
+                        else if (section === "achievements") achievements.push(cleaned);
+                        else if (section === "expertise") expertise.push(cleaned);
+                      }
+                      item = "";
+                    };
+
+                    for (const line of lines) {
+                      const trimmed = line.trim();
+                      if (!trimmed) { save(); continue; }
+
+                      if (/^##.*Key Facts/i.test(trimmed)) { save(); section = "facts"; }
+                      else if (/^##.*Achievement/i.test(trimmed)) { save(); section = "achievements"; }
+                      else if (/^##.*Expertise/i.test(trimmed)) { save(); section = "expertise"; }
+                      else if (section && trimmed.startsWith("-")) {
+                        const isIndented = line.startsWith("  ");
+                        if (isIndented) {
+                          item += (item ? " " : "") + trimmed.substring(1).trim();
+                        } else {
+                          save();
+                        }
+                      } else if (section) {
+                        item += (item ? " " : "") + trimmed;
+                      }
+                    }
+                    save();
+                    console.log('[CLIENT PARSER] Extracted:', keyFacts.length, 'facts,', achievements.length, 'achievements,', expertise.length, 'expertise');
+                  }
+
+                  if (keyFacts.length > 0 || achievements.length > 0 || expertise.length > 0) {
+                    setResearchResults({
+                      keyFacts,
+                      achievements,
+                      expertise,
+                      sources: json.sources || [],
+                    });
+                  }
+                } else if (json.type === "research_failed") {
+                  // Clear research progress simulation
+                  if (researchProgressInterval) {
+                    clearInterval(researchProgressInterval);
+                    researchProgressInterval = null;
+                  }
+
+                  // Research failed, continue anyway
+                  setResearchStage(null);
+                  setGenStage("streaming");
+                } else if (json.type === "progress") {
+                  const percentage = Math.min(99, Math.max(0, Math.round(json.percentage || 0)));
+
+                  // Skip the initial 1% signal from API (only show when streaming really starts)
+                  const shouldSkipInitial = percentage === 1 && !researchStage?.active && genProgress === 0;
+                  if (shouldSkipInitial) {
+                    console.log('[Progress] Skipping initial 1% signal - continuing stream');
+                  } else {
+                    // Only move progress forward (never backwards) for smooth UX
+                    setMaxGenProgress((prev) => {
+                      const newMax = Math.max(prev, percentage);
+                      setGenProgress(newMax);
+                      return newMax;
+                    });
+
+                    // Transition to streaming stage once we get real progress (if not in research)
+                    if (percentage > 2 && !researchStage?.active && genStage !== "streaming") {
+                      setGenStage("streaming");
+                    }
+                  }
                 } else if (json.type === "complete") {
+                  console.log('[SSE] Generation complete, finishing stream');
                   const leader = json.leader;
                   if (!leader) throw new Error("API returned no leader JSON");
 
@@ -335,7 +536,10 @@ export function NewLeaderApp() {
                   setPreviewTab("json");
                   setEditingJson(false);
                   setGenProgress(100);
-                  return;
+                  setResearchStage(null);
+
+                  // Signal to exit the stream reading loop
+                  streamComplete = true;
                 } else if (json.type === "error") {
                   throw new Error(json.error || "Unknown error");
                 }
@@ -347,15 +551,31 @@ export function NewLeaderApp() {
         }
       }
     } catch (e) {
+      console.error('[GENERATE] ===== ERROR CAUGHT =====');
+      console.error('[GENERATE] Error:', e);
       const msg = e instanceof Error ? e.message : "Unknown error";
+      console.error('[GENERATE] Error message:', msg);
       setGenError(msg);
       setGenProgress(0);
       setGenStage(null);
+      setResearchStage(null);
+
+      // Clear research progress interval on error
+      if (researchProgressInterval) {
+        clearInterval(researchProgressInterval);
+      }
     } finally {
+      console.log('[GENERATE] ===== FINALLY BLOCK =====');
+      console.log('[GENERATE] Setting generating to false');
       setGenerating(false);
       setGeneratingMode(null);
+
+      // Clear research progress interval on completion
+      if (researchProgressInterval) {
+        clearInterval(researchProgressInterval);
+      }
     }
-  }, [genName, genDescription]);
+  }, [genName, genDescription, webSearchEnabled, researchStage]);
 
   const handleSave = React.useCallback(async () => {
     if (!parsed) return;
@@ -604,7 +824,90 @@ export function NewLeaderApp() {
                       </div>
                       {generatingMode === "random" && (
                         <div className="mt-3 space-y-3">
-                          {genStage === "waiting" ? (
+                          {researchStage?.active ? (
+                            /* Research Stage: Active web search with progress */
+                            <div className="space-y-3 animate-in fade-in duration-300">
+                              <div className="flex items-center justify-between text-sm">
+                                <div className="flex items-center gap-2">
+                                  <div className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+                                  <span className="text-foreground font-medium">
+                                    {researchStage.message}
+                                  </span>
+                                </div>
+                                <span className="font-semibold tabular-nums text-amber-600 dark:text-amber-400">
+                                  {Math.round(displayProgress)}%
+                                </span>
+                              </div>
+                              {/* Progress bar with amber theme */}
+                              <div className="relative h-2.5 overflow-hidden rounded-full bg-amber-500/10">
+                                <div
+                                  className="h-full bg-gradient-to-r from-amber-500 to-amber-400 transition-all duration-300 ease-out"
+                                  style={{ width: `${displayProgress}%` }}
+                                />
+                              </div>
+                              <div className="flex items-center justify-between text-xs">
+                                <div className="space-y-0.5">
+                                  <p className="text-amber-600 dark:text-amber-400 font-medium">
+                                    🔍 Searching web sources...
+                                  </p>
+                                  <p className="text-muted-foreground/70">
+                                    Gathering biographical info, achievements, expertise
+                                  </p>
+                                </div>
+                                <span className="text-muted-foreground/70 shrink-0 ml-2">
+                                  {elapsedTime.toFixed(1)}s
+                                </span>
+                              </div>
+                            </div>
+                          ) : researchStage && !researchStage.active ? (
+                            /* Research Complete + JSON Generation Progress */
+                            <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                              {/* Research Complete Section */}
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between text-sm">
+                                  <div className="flex items-center gap-2">
+                                    <Check className="h-4 w-4 text-emerald-500" />
+                                    <span className="text-muted-foreground">
+                                      {researchStage.message}
+                                    </span>
+                                  </div>
+                                  <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                                    {researchStage.sourcesFound} sources • 100%
+                                  </span>
+                                </div>
+                                <Progress value={100} className="h-2 bg-emerald-500/10">
+                                  <div className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400" />
+                                </Progress>
+                              </div>
+
+                              {/* JSON Generation Progress Section */}
+                              <div className="space-y-2 border-t border-border/60 pt-3">
+                                <div className="flex items-center justify-between text-sm">
+                                  <div className="flex items-center gap-2">
+                                    <div className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+                                    <span className="text-foreground font-medium">
+                                      Generating Leader Bible...
+                                    </span>
+                                  </div>
+                                  <span className="font-semibold tabular-nums text-primary">
+                                    {Math.round((displayProgress - 50) * 2)}%
+                                  </span>
+                                </div>
+                                <Progress
+                                  value={(displayProgress - 50) * 2}
+                                  className="h-2.5"
+                                />
+                                <div className="flex items-center justify-between text-xs">
+                                  <span className="text-muted-foreground">
+                                    Using research insights...
+                                  </span>
+                                  <span className="text-muted-foreground/70">
+                                    {elapsedTime.toFixed(1)}s total
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          ) : genStage === "waiting" ? (
                             /* Stage 1: Waiting for first token */
                             <div className="space-y-3 animate-in fade-in duration-300">
                               <div className="flex items-center justify-between text-sm">
@@ -634,11 +937,11 @@ export function NewLeaderApp() {
                                   </span>
                                 </div>
                                 <span className="font-semibold tabular-nums text-primary">
-                                  {Math.round(displayProgress)}%
+                                  {Math.round(displayProgress) > 0 ? `${Math.round(displayProgress)}%` : "..."}
                                 </span>
                               </div>
                               <Progress
-                                value={displayProgress}
+                                value={Math.max(1, displayProgress)}
                                 className="h-2.5"
                               />
                               <div className="flex items-center justify-between text-xs">
@@ -678,6 +981,59 @@ export function NewLeaderApp() {
                         }
                       }}
                     />
+
+                    {/* Web Search Toggle */}
+                    <div
+                      className={cn(
+                        "rounded-xl border border-border/60 bg-card/50 p-3 transition-colors",
+                        !genName.trim() || generating
+                          ? "cursor-not-allowed opacity-60"
+                          : "cursor-pointer hover:bg-card/80 hover:border-border"
+                      )}
+                      onClick={() => {
+                        if (!generating && genName.trim()) {
+                          setWebSearchEnabled(!webSearchEnabled);
+                        }
+                      }}
+                    >
+                      <div className="flex items-start gap-3">
+                        <input
+                          type="checkbox"
+                          id="webSearchToggle"
+                          checked={webSearchEnabled}
+                          onChange={(e) => setWebSearchEnabled(e.target.checked)}
+                          disabled={generating || !genName.trim()}
+                          className="mt-0.5 h-4 w-4 rounded border-border bg-background text-primary focus:ring-2 focus:ring-primary/20 pointer-events-none"
+                          tabIndex={-1}
+                        />
+                        <div className="flex-1">
+                          <div
+                            className={cn(
+                              "block text-sm font-medium",
+                              !genName.trim()
+                                ? "text-muted-foreground/50"
+                                : "text-foreground"
+                            )}
+                          >
+                            🌐 Enable Web Search
+                          </div>
+                          <p className={cn(
+                            "mt-1 text-xs",
+                            !genName.trim()
+                              ? "text-muted-foreground/40"
+                              : "text-muted-foreground"
+                          )}>
+                            Research current biographical info from the web for accuracy. Adds ~2-3 seconds.
+                            {!genName.trim() && (
+                              <span className="block mt-1 text-amber-600 dark:text-amber-400 font-medium">
+                                ⚠️ Requires a leader name to enable
+                              </span>
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
                     <textarea
                       value={genDescription}
                       onChange={(e) => setGenDescription(e.target.value)}
@@ -720,7 +1076,90 @@ export function NewLeaderApp() {
                     </div>
                     {generatingMode === "custom" && (
                       <div className="rounded-xl border border-border/60 bg-muted/20 p-4">
-                        {genStage === "waiting" ? (
+                        {researchStage?.active ? (
+                          /* Research Stage: Active web search with progress */
+                          <div className="space-y-3 animate-in fade-in duration-300">
+                            <div className="flex items-center justify-between text-sm">
+                              <div className="flex items-center gap-2">
+                                <div className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+                                <span className="text-foreground font-medium">
+                                  {researchStage.message}
+                                </span>
+                              </div>
+                              <span className="font-semibold tabular-nums text-amber-600 dark:text-amber-400">
+                                {Math.round(displayProgress) > 0 ? `${Math.round(displayProgress)}%` : "..."}
+                              </span>
+                            </div>
+                            {/* Progress bar with amber theme */}
+                            <div className="relative h-2.5 overflow-hidden rounded-full bg-amber-500/10">
+                              <div
+                                className="h-full bg-gradient-to-r from-amber-500 to-amber-400 transition-all duration-300 ease-out"
+                                style={{ width: `${Math.max(1, displayProgress)}%` }}
+                              />
+                            </div>
+                            <div className="flex items-center justify-between text-xs">
+                              <div className="space-y-0.5">
+                                <p className="text-amber-600 dark:text-amber-400 font-medium">
+                                  🔍 Searching web sources...
+                                </p>
+                                <p className="text-muted-foreground/70">
+                                  Gathering biographical info, achievements, expertise
+                                </p>
+                              </div>
+                              <span className="text-muted-foreground/70 shrink-0 ml-2">
+                                {elapsedTime.toFixed(1)}s
+                              </span>
+                            </div>
+                          </div>
+                        ) : researchStage && !researchStage.active ? (
+                          /* Research Complete + JSON Generation Progress */
+                          <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                            {/* Research Complete Section */}
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between text-sm">
+                                <div className="flex items-center gap-2">
+                                  <Check className="h-4 w-4 text-emerald-500" />
+                                  <span className="text-muted-foreground">
+                                    {researchStage.message}
+                                  </span>
+                                </div>
+                                <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                                  {researchStage.sourcesFound} sources • 100%
+                                </span>
+                              </div>
+                              <Progress value={100} className="h-2 bg-emerald-500/10">
+                                <div className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400" />
+                              </Progress>
+                            </div>
+
+                            {/* JSON Generation Progress Section */}
+                            <div className="space-y-2 border-t border-border/60 pt-3">
+                              <div className="flex items-center justify-between text-sm">
+                                <div className="flex items-center gap-2">
+                                  <div className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+                                  <span className="text-foreground font-medium">
+                                    Generating Leader Bible...
+                                  </span>
+                                </div>
+                                <span className="font-semibold tabular-nums text-primary">
+                                  {Math.round((displayProgress - 50) * 2)}%
+                                </span>
+                              </div>
+                              <Progress
+                                value={(displayProgress - 50) * 2}
+                                className="h-2.5"
+                              />
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="text-muted-foreground">
+                                  Using research insights...
+                                </span>
+                                <span className="text-muted-foreground/70">
+                                  {elapsedTime.toFixed(1)}s total
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        ) : genStage === "waiting" ? (
                           /* Stage 1: Waiting for first token */
                           <div className="space-y-3 animate-in fade-in duration-300">
                             <div className="flex items-center justify-between text-sm">
@@ -750,11 +1189,11 @@ export function NewLeaderApp() {
                                 </span>
                               </div>
                               <span className="font-semibold tabular-nums text-primary">
-                                {Math.round(displayProgress)}%
+                                {Math.round(displayProgress) > 0 ? `${Math.round(displayProgress)}%` : "..."}
                               </span>
                             </div>
                             <Progress
-                              value={displayProgress}
+                              value={Math.max(1, displayProgress)}
                               className="h-2.5"
                             />
                             <div className="flex items-center justify-between text-xs">
@@ -860,7 +1299,7 @@ export function NewLeaderApp() {
               </span>
             </div>
 
-            <Tabs value={previewTab} onValueChange={(v) => setPreviewTab(v as "overview" | "json")} className="mx-auto max-w-4xl">
+            <Tabs value={previewTab} onValueChange={(v) => setPreviewTab(v as "overview" | "json" | "research")} className="mx-auto max-w-4xl">
               <div className="flex items-center justify-center">
                 <TabsList className="rounded-full">
                   <TabsTrigger value="overview" className="rounded-full">
@@ -869,6 +1308,11 @@ export function NewLeaderApp() {
                   <TabsTrigger value="json" className="rounded-full">
                     Full JSON
                   </TabsTrigger>
+                  {researchResults && (
+                    <TabsTrigger value="research" className="rounded-full">
+                      🔍 Research
+                    </TabsTrigger>
+                  )}
                 </TabsList>
               </div>
 
@@ -1069,6 +1513,111 @@ export function NewLeaderApp() {
                     )}
                   </div>
                 </div>
+              </TabsContent>
+
+              <TabsContent value="research" className="mt-6">
+                {researchResults && (
+                  <div className="overflow-hidden rounded-3xl border border-border/60 bg-card">
+                    <div className="border-b border-border/40 bg-gradient-to-br from-amber-500/[0.06] via-transparent to-amber-600/[0.04] px-5 py-4">
+                      <div className="flex items-center gap-2">
+                        <div className="text-sm font-medium text-foreground">🔍 Web Search Results</div>
+                        <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-600 dark:text-amber-400">
+                          {researchResults.sources.length} sources
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Research data gathered from the web and used to inform the Leader Bible generation
+                      </p>
+                    </div>
+
+                    <div className="p-6 space-y-6">
+                      {/* Key Facts */}
+                      {researchResults.keyFacts.filter(f => f && f.length > 5).length > 0 && (
+                        <div>
+                          <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                            <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-primary/10 text-xs">📋</span>
+                            Key Facts ({researchResults.keyFacts.filter(f => f && f.length > 5).length})
+                          </h3>
+                          <ul className="space-y-3">
+                            {researchResults.keyFacts.filter(f => f && f.length > 5).map((fact, i) => (
+                              <li key={i} className="text-sm text-foreground/90 flex gap-2">
+                                <span className="text-primary font-medium mt-0.5 shrink-0">•</span>
+                                <div className="flex-1 prose prose-sm dark:prose-invert prose-p:my-0 prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-strong:text-foreground prose-strong:font-semibold">
+                                  <ReactMarkdown>{fact}</ReactMarkdown>
+                                </div>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Notable Achievements */}
+                      {researchResults.achievements.filter(a => a && a.length > 5).length > 0 && (
+                        <div>
+                          <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                            <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-primary/10 text-xs">🏆</span>
+                            Notable Achievements ({researchResults.achievements.filter(a => a && a.length > 5).length})
+                          </h3>
+                          <ul className="space-y-3">
+                            {researchResults.achievements.filter(a => a && a.length > 5).map((achievement, i) => (
+                              <li key={i} className="text-sm text-foreground/90 flex gap-2">
+                                <span className="text-primary font-medium mt-0.5 shrink-0">•</span>
+                                <div className="flex-1 prose prose-sm dark:prose-invert prose-p:my-0 prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-strong:text-foreground prose-strong:font-semibold">
+                                  <ReactMarkdown>{achievement}</ReactMarkdown>
+                                </div>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Areas of Expertise */}
+                      {researchResults.expertise.filter(e => e && e.length > 5).length > 0 && (
+                        <div>
+                          <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                            <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-primary/10 text-xs">💼</span>
+                            Areas of Expertise ({researchResults.expertise.filter(e => e && e.length > 5).length})
+                          </h3>
+                          <ul className="space-y-3">
+                            {researchResults.expertise.filter(e => e && e.length > 5).map((exp, i) => (
+                              <li key={i} className="text-sm text-foreground/90 flex gap-2">
+                                <span className="text-primary font-medium mt-0.5 shrink-0">•</span>
+                                <div className="flex-1 prose prose-sm dark:prose-invert prose-p:my-0 prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-strong:text-foreground prose-strong:font-semibold">
+                                  <ReactMarkdown>{exp}</ReactMarkdown>
+                                </div>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Sources */}
+                      {researchResults.sources.length > 0 && (
+                        <div>
+                          <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                            <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-primary/10 text-xs">📚</span>
+                            Sources
+                          </h3>
+                          <ul className="space-y-2">
+                            {researchResults.sources.map((source, i) => (
+                              <li key={i} className="text-sm">
+                                <a
+                                  href={source.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-primary hover:underline flex items-start gap-2"
+                                >
+                                  <span className="text-muted-foreground font-medium mt-0.5">{i + 1}.</span>
+                                  <span>{source.title}</span>
+                                </a>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </TabsContent>
             </Tabs>
           </div>
