@@ -165,6 +165,7 @@ export function NewLeaderApp() {
   const [showTextarea, setShowTextarea] = React.useState(false);
   const [showGenerator, setShowGenerator] = React.useState(false);
   const [genName, setGenName] = React.useState("");
+  const [imageSearchTerm, setImageSearchTerm] = React.useState("");
   const [genDescription, setGenDescription] = React.useState("");
   const [webSearchEnabled, setWebSearchEnabled] = React.useState(false);
   const [findPhotosEnabled, setFindPhotosEnabled] = React.useState(false);
@@ -320,6 +321,7 @@ export function NewLeaderApp() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: genName.trim(),
+          searchTerm: imageSearchTerm.trim() || undefined,
           description: genDescription.trim() || undefined,
         }),
       })
@@ -1259,6 +1261,27 @@ export function NewLeaderApp() {
                       }}
                     />
 
+                    <input
+                      value={imageSearchTerm}
+                      onChange={(e) => setImageSearchTerm(e.target.value)}
+                      placeholder="Image search term (leave blank to use name)"
+                      className={cn(
+                        "h-10 w-full rounded-xl border bg-background px-3 text-sm",
+                        "outline-none focus:ring-2 focus:ring-primary/20",
+                        "placeholder:text-muted-foreground/50",
+                      )}
+                      disabled={generating || savingImage}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !generating) {
+                          e.preventDefault();
+                          void handleGenerate(false);
+                        }
+                      }}
+                    />
+                    <p className="text-xs text-muted-foreground/60 -mt-1">
+                      Custom search term for finding reference images
+                    </p>
+
                     {/* Web Search Toggle */}
                     <div
                       className={cn(
@@ -1361,6 +1384,48 @@ export function NewLeaderApp() {
                               </span>
                             )}
                           </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Upload Reference Image */}
+                    <div className="rounded-xl border border-border/60 bg-card/50 p-3">
+                      <div className="flex items-start gap-3">
+                        <div className="flex-1">
+                          <div className="block text-sm font-medium text-foreground">
+                            🖼️ Upload reference image
+                          </div>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Or upload your own image to use as visual reference
+                          </p>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                const reader = new FileReader();
+                                reader.onload = (event) => {
+                                  const dataUrl = event.target?.result as string;
+                                  // Add uploaded image to reference images
+                                  const uploadedImage = {
+                                    url: dataUrl,
+                                    thumbnail: dataUrl,
+                                    title: file.name,
+                                    source: "Uploaded",
+                                  };
+                                  setReferenceImages([uploadedImage]);
+                                  setSelectedImageIndex(0);
+                                  setSelectedImageUrl(dataUrl);
+                                  setImageSelectionStage("selected");
+                                  console.log('[Images] Uploaded image:', file.name);
+                                };
+                                reader.readAsDataURL(file);
+                              }
+                            }}
+                            className="mt-2 block w-full text-sm text-muted-foreground file:mr-3 file:rounded-lg file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-primary-foreground hover:file:bg-primary/90 file:cursor-pointer"
+                            disabled={generating || savingImage}
+                          />
                         </div>
                       </div>
                     </div>

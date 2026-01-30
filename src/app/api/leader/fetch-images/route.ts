@@ -7,6 +7,7 @@ export const dynamic = "force-dynamic";
 
 type Body = {
   name: string;
+  searchTerm?: string;
   description?: string;
 };
 
@@ -18,10 +19,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "name is required" }, { status: 400 });
     }
 
-    console.log(`[Fetch Images] 🔍 Searching for images of: ${body.name}`);
+    // Use searchTerm if provided, otherwise fall back to name
+    const searchQuery = body.searchTerm?.trim() || body.name;
+    console.log(`[Fetch Images] 🔍 Searching for images of: ${searchQuery}`);
+    if (body.searchTerm && body.searchTerm !== body.name) {
+      console.log(`[Fetch Images] ℹ️  Using custom search term (leader name: ${body.name})`);
+    }
 
     // Fetch images from SerpAPI
-    const serpImages = await fetchReferenceImages(body.name, body.description);
+    const serpImages = await fetchReferenceImages(searchQuery, body.description);
 
     if (serpImages.length === 0) {
       console.log("[Fetch Images] ⚠️  No images found");
