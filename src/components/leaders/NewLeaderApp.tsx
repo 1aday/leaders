@@ -1365,7 +1365,7 @@ export function NewLeaderApp() {
                           </div>
                           <p
                             className={cn(
-                              "mt-1 text-xs",
+                              "mt-1 text-xs break-words",
                               !genName.trim()
                                 ? "text-muted-foreground/40"
                                 : "text-muted-foreground"
@@ -1383,44 +1383,87 @@ export function NewLeaderApp() {
                     </div>
 
                     {/* Upload Reference Image */}
-                    <div className="rounded-xl border border-border/60 bg-card/50 p-3">
-                      <div className="flex items-start gap-3">
-                        <div className="flex-1">
-                          <div className="block text-sm font-medium text-foreground">
-                            🖼️ Upload reference image
-                          </div>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            Or upload your own image to use as visual reference
-                          </p>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) {
-                                const reader = new FileReader();
-                                reader.onload = (event) => {
-                                  const dataUrl = event.target?.result as string;
-                                  // Add uploaded image to reference images
-                                  const uploadedImage = {
-                                    url: dataUrl,
-                                    thumbnail: dataUrl,
-                                    title: file.name,
-                                    source: "Uploaded",
-                                  };
-                                  setReferenceImages([uploadedImage]);
-                                  setSelectedImageIndex(0);
-                                  setSelectedImageUrl(dataUrl);
-                                  setImageSelectionStage("selected");
-                                  console.log('[Images] Uploaded image:', file.name);
-                                };
-                                reader.readAsDataURL(file);
-                              }
-                            }}
-                            className="mt-2 block w-full text-sm text-muted-foreground file:mr-3 file:rounded-lg file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-primary-foreground hover:file:bg-primary/90 file:cursor-pointer"
-                            disabled={generating || savingImage}
-                          />
+                    <div
+                      className={cn(
+                        "rounded-xl border-2 border-dashed bg-card/50 p-6 transition-colors",
+                        "hover:border-primary/50 hover:bg-card/80",
+                        generating || savingImage ? "opacity-60 cursor-not-allowed" : "cursor-pointer"
+                      )}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (!generating && !savingImage) {
+                          e.currentTarget.classList.add('border-primary', 'bg-primary/5');
+                        }
+                      }}
+                      onDragLeave={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        e.currentTarget.classList.remove('border-primary', 'bg-primary/5');
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        e.currentTarget.classList.remove('border-primary', 'bg-primary/5');
+
+                        if (generating || savingImage) return;
+
+                        const file = e.dataTransfer.files?.[0];
+                        if (file && file.type.startsWith('image/')) {
+                          // Use blob URL instead of data URL to avoid "URL too long" errors
+                          const blobUrl = URL.createObjectURL(file);
+                          const uploadedImage = {
+                            url: blobUrl,
+                            thumbnail: blobUrl,
+                            title: file.name,
+                            source: "Uploaded",
+                          };
+                          setReferenceImages([uploadedImage]);
+                          setSelectedImageIndex(0);
+                          setSelectedImageUrl(blobUrl);
+                          setImageSelectionStage("selected");
+                          console.log('[Images] Dropped image:', file.name);
+                        }
+                      }}
+                      onClick={() => {
+                        if (!generating && !savingImage) {
+                          document.getElementById('file-upload-input')?.click();
+                        }
+                      }}
+                    >
+                      <div className="flex flex-col items-center gap-2 text-center">
+                        <div className="text-3xl">🖼️</div>
+                        <div className="text-sm font-medium text-foreground">
+                          Upload reference image
                         </div>
+                        <p className="text-xs text-muted-foreground break-words">
+                          Drag and drop an image here, or click to browse
+                        </p>
+                        <input
+                          id="file-upload-input"
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              // Use blob URL instead of data URL to avoid "URL too long" errors
+                              const blobUrl = URL.createObjectURL(file);
+                              const uploadedImage = {
+                                url: blobUrl,
+                                thumbnail: blobUrl,
+                                title: file.name,
+                                source: "Uploaded",
+                              };
+                              setReferenceImages([uploadedImage]);
+                              setSelectedImageIndex(0);
+                              setSelectedImageUrl(blobUrl);
+                              setImageSelectionStage("selected");
+                              console.log('[Images] Uploaded image:', file.name);
+                            }
+                          }}
+                          disabled={generating || savingImage}
+                        />
                       </div>
                     </div>
 
