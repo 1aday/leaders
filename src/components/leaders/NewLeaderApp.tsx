@@ -178,6 +178,7 @@ export function NewLeaderApp() {
   const [selectedImageIndex, setSelectedImageIndex] = React.useState<number | null>(null);
   const [selectedImageUrl, setSelectedImageUrl] = React.useState<string | null>(null);
   const selectedImageUrlRef = React.useRef<string | null>(null); // Backup ref - NEVER gets cleared accidentally
+  const [uploadedFile, setUploadedFile] = React.useState<File | null>(null); // Store uploaded file
   const [savingImage] = React.useState(false); // No longer used - instant selection now
   const [imageSelectionStage, setImageSelectionStage] = React.useState<
     "idle" | "fetching" | "selecting" | "selected"
@@ -488,8 +489,24 @@ export function NewLeaderApp() {
 
     try {
       console.log('[GENERATE] Starting fetch to /api/leader/generate');
-      // Use ref as backup if state is somehow null (shouldn't happen but defensive)
-      const imageUrlToSend = selectedImageUrl || selectedImageUrlRef.current;
+
+      // Convert uploaded file to base64 if present
+      let imageUrlToSend = selectedImageUrl || selectedImageUrlRef.current;
+      if (uploadedFile && imageUrlToSend?.startsWith('blob:')) {
+        console.log('[GENERATE] Converting uploaded file to base64...');
+        try {
+          const base64 = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(uploadedFile);
+          });
+          imageUrlToSend = base64;
+          console.log('[GENERATE] ✅ Converted to base64 (length:', base64.length, ')');
+        } catch (err) {
+          console.error('[GENERATE] ❌ Failed to convert file:', err);
+        }
+      }
 
       console.log('[GENERATE] 📊 State before sending:');
       console.log('[GENERATE]   - selectedImageUrl (state):', selectedImageUrl);
@@ -1410,8 +1427,9 @@ export function NewLeaderApp() {
 
                         const file = e.dataTransfer.files?.[0];
                         if (file && file.type.startsWith('image/')) {
-                          // Use blob URL instead of data URL to avoid "URL too long" errors
+                          // Store the file and create blob URL for preview
                           const blobUrl = URL.createObjectURL(file);
+                          setUploadedFile(file); // Store file for later conversion
                           const uploadedImage = {
                             url: blobUrl,
                             thumbnail: blobUrl,
@@ -1447,8 +1465,9 @@ export function NewLeaderApp() {
                           onChange={(e) => {
                             const file = e.target.files?.[0];
                             if (file) {
-                              // Use blob URL instead of data URL to avoid "URL too long" errors
+                              // Store the file and create blob URL for preview
                               const blobUrl = URL.createObjectURL(file);
+                              setUploadedFile(file); // Store file for later conversion
                               const uploadedImage = {
                                 url: blobUrl,
                                 thumbnail: blobUrl,
