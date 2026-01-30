@@ -490,23 +490,8 @@ export function NewLeaderApp() {
     try {
       console.log('[GENERATE] Starting fetch to /api/leader/generate');
 
-      // Convert uploaded file to base64 if present
-      let imageUrlToSend = selectedImageUrl || selectedImageUrlRef.current;
-      if (uploadedFile && imageUrlToSend?.startsWith('blob:')) {
-        console.log('[GENERATE] Converting uploaded file to base64...');
-        try {
-          const base64 = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result as string);
-            reader.onerror = reject;
-            reader.readAsDataURL(uploadedFile);
-          });
-          imageUrlToSend = base64;
-          console.log('[GENERATE] ✅ Converted to base64 (length:', base64.length, ')');
-        } catch (err) {
-          console.error('[GENERATE] ❌ Failed to convert file:', err);
-        }
-      }
+      // Use selected image URL (now always a permanent URL from storage)
+      const imageUrlToSend = selectedImageUrl || selectedImageUrlRef.current;
 
       console.log('[GENERATE] 📊 State before sending:');
       console.log('[GENERATE]   - selectedImageUrl (state):', selectedImageUrl);
@@ -1427,20 +1412,39 @@ export function NewLeaderApp() {
 
                         const file = e.dataTransfer.files?.[0];
                         if (file && file.type.startsWith('image/')) {
-                          // Store the file and create blob URL for preview
-                          const blobUrl = URL.createObjectURL(file);
-                          setUploadedFile(file); // Store file for later conversion
-                          const uploadedImage = {
-                            url: blobUrl,
-                            thumbnail: blobUrl,
-                            title: file.name,
-                            source: "Uploaded",
-                          };
-                          setReferenceImages([uploadedImage]);
-                          setSelectedImageIndex(0);
-                          setSelectedImageUrl(blobUrl);
-                          setImageSelectionStage("selected");
-                          console.log('[Images] Dropped image:', file.name);
+                          // Upload to storage immediately for permanent URL
+                          setImageSelectionStage("fetching");
+                          const formData = new FormData();
+                          formData.append('file', file);
+
+                          fetch('/api/upload-image', {
+                            method: 'POST',
+                            body: formData,
+                          })
+                            .then(res => res.json())
+                            .then(data => {
+                              if (data.error) {
+                                console.error('[Images] Upload failed:', data.error);
+                                setImageSelectionStage("idle");
+                                return;
+                              }
+                              const uploadedImage = {
+                                url: data.url,
+                                thumbnail: data.url,
+                                title: file.name,
+                                source: "Uploaded",
+                              };
+                              setReferenceImages([uploadedImage]);
+                              setSelectedImageIndex(0);
+                              setSelectedImageUrl(data.url);
+                              setUploadedFile(null); // Clear file since we have permanent URL
+                              setImageSelectionStage("selected");
+                              console.log('[Images] Uploaded to storage:', data.url);
+                            })
+                            .catch(err => {
+                              console.error('[Images] Upload error:', err);
+                              setImageSelectionStage("idle");
+                            });
                         }
                       }}
                       onClick={() => {
@@ -1465,20 +1469,39 @@ export function NewLeaderApp() {
                           onChange={(e) => {
                             const file = e.target.files?.[0];
                             if (file) {
-                              // Store the file and create blob URL for preview
-                              const blobUrl = URL.createObjectURL(file);
-                              setUploadedFile(file); // Store file for later conversion
-                              const uploadedImage = {
-                                url: blobUrl,
-                                thumbnail: blobUrl,
-                                title: file.name,
-                                source: "Uploaded",
-                              };
-                              setReferenceImages([uploadedImage]);
-                              setSelectedImageIndex(0);
-                              setSelectedImageUrl(blobUrl);
-                              setImageSelectionStage("selected");
-                              console.log('[Images] Uploaded image:', file.name);
+                              // Upload to storage immediately for permanent URL
+                              setImageSelectionStage("fetching");
+                              const formData = new FormData();
+                              formData.append('file', file);
+
+                              fetch('/api/upload-image', {
+                                method: 'POST',
+                                body: formData,
+                              })
+                                .then(res => res.json())
+                                .then(data => {
+                                  if (data.error) {
+                                    console.error('[Images] Upload failed:', data.error);
+                                    setImageSelectionStage("idle");
+                                    return;
+                                  }
+                                  const uploadedImage = {
+                                    url: data.url,
+                                    thumbnail: data.url,
+                                    title: file.name,
+                                    source: "Uploaded",
+                                  };
+                                  setReferenceImages([uploadedImage]);
+                                  setSelectedImageIndex(0);
+                                  setSelectedImageUrl(data.url);
+                                  setUploadedFile(null); // Clear file since we have permanent URL
+                                  setImageSelectionStage("selected");
+                                  console.log('[Images] Uploaded to storage:', data.url);
+                                })
+                                .catch(err => {
+                                  console.error('[Images] Upload error:', err);
+                                  setImageSelectionStage("idle");
+                                });
                             }
                           }}
                           disabled={generating || savingImage}
