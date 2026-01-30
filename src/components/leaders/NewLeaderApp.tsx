@@ -176,6 +176,8 @@ export function NewLeaderApp() {
   }>>([]);
   const [selectedImageIndex, setSelectedImageIndex] = React.useState<number | null>(null);
   const [selectedImageUrl, setSelectedImageUrl] = React.useState<string | null>(null);
+  const selectedImageUrlRef = React.useRef<string | null>(null); // Backup ref - NEVER gets cleared accidentally
+  const [savingImage] = React.useState(false); // No longer used - instant selection now
   const [imageSelectionStage, setImageSelectionStage] = React.useState<
     "idle" | "fetching" | "selecting" | "selected"
   >("idle");
@@ -287,6 +289,7 @@ export function NewLeaderApp() {
       setReferenceImages([]);
       setSelectedImageIndex(null);
       setSelectedImageUrl(null);
+      selectedImageUrlRef.current = null; // Also clear ref
       setImageSelectionStage("idle");
       return;
     }
@@ -353,39 +356,51 @@ export function NewLeaderApp() {
     return () => clearTimeout(debounceTimer);
   }, [findPhotosEnabled, genName, genDescription, generating]);
 
-  // Helper function to download and save image selection
+  // Helper function to save image selection
   const continueGenerationWithImage = React.useCallback(async (imageUrl: string) => {
     console.log("[Image Selection] 📸 User clicked image:", imageUrl);
-    console.log("[Image Selection] 📥 Downloading and saving to Supabase...");
 
     try {
-      // Download and save image to our storage
-      const saveRes = await fetch("/api/leader/save-reference-image", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          imageUrl: imageUrl,
-          leaderId: genName.trim().replace(/\s+/g, "-").toUpperCase(),
-        }),
-      });
+      let originalUrl = imageUrl;
 
-      if (!saveRes.ok) {
-        throw new Error(`Failed to save image: ${saveRes.status}`);
+      // Extract original URL from proxy if needed
+      if (imageUrl.startsWith("/api/proxy-image")) {
+        const params = new URLSearchParams(imageUrl.split("?")[1]);
+        const extracted = params.get("url");
+
+        if (extracted) {
+          originalUrl = extracted;
+          console.log("[Image Selection] ✅ Extracted original URL from proxy:", originalUrl);
+        } else {
+          throw new Error("Failed to extract URL from proxy");
+        }
       }
 
-      const saveData = await saveRes.json();
-      const savedUrl = saveData.savedUrl;
+      // Validate URL
+      if (!originalUrl || typeof originalUrl !== "string" || !originalUrl.startsWith("http")) {
+        console.error("[Image Selection] ❌ Invalid URL:", originalUrl);
+        throw new Error("Invalid image URL");
+      }
 
-      console.log("[Image Selection] ✅ Image saved to:", savedUrl);
+      console.log("[Image Selection] ✅ Selected:", originalUrl);
 
+      // Store the original URL - we'll upload to Supabase later during generation
+      // This avoids Supabase timeout issues when displaying the selected image
       setImageSelectionStage("selected");
-      setSelectedImageUrl(savedUrl); // Store Supabase URL (not original)
-      console.log("[Image Selection] ✅ State updated with Supabase URL:", savedUrl);
+      setSelectedImageUrl(originalUrl); // Store original URL for now
+      selectedImageUrlRef.current = originalUrl;
+      console.log("[Image Selection] ✅ Stored original URL:", originalUrl);
     } catch (e) {
-      console.error("Failed to send image selection:", e);
-      setGenError("Failed to send image selection");
+      console.error("Failed to save image:", e);
+      const errorMsg = e instanceof Error ? e.message : "Failed to save image";
+      setGenError(`⚠️ ${errorMsg}`);
+      // Clear selection on error
+      setImageSelectionStage("selecting");
+      setSelectedImageUrl(null);
+      selectedImageUrlRef.current = null;
+      setSelectedImageIndex(null);
     }
-  }, [genStartTime]);
+  }, [genName]);
 
   // Helper function to skip image selection
   const continueGenerationWithoutImage = React.useCallback(async () => {
@@ -429,6 +444,22 @@ export function NewLeaderApp() {
     console.log('[GENERATE] name:', name);
     console.log('[GENERATE] useWebSearch:', useWebSearch);
     console.log('[GENERATE] webSearchEnabled:', webSearchEnabled);
+    console.log('[GENERATE] findPhotosEnabled:', findPhotosEnabled);
+    console.log('[GENERATE] selectedImageUrl:', selectedImageUrl);
+
+    // ❌ VALIDATION: If user enabled "Find reference photos", they MUST select an image first
+    const hasSelectedImage = selectedImageUrl || selectedImageUrlRef.current;
+    if (findPhotosEnabled && !hasSelectedImage && !forceRandom) {
+      console.error('[GENERATE] ❌ BLOCKED: findPhotosEnabled=true but no image selected');
+      console.error('[GENERATE]   - selectedImageUrl state:', selectedImageUrl);
+      console.error('[GENERATE]   - selectedImageUrlRef.current:', selectedImageUrlRef.current);
+      setGenError("⚠️ Please select a reference image first, or disable 'Find reference photos'");
+      return; // DON'T proceed
+    }
+
+    if (findPhotosEnabled && hasSelectedImage) {
+      console.log('[GENERATE] ✅ VALIDATED: User selected image:', hasSelectedImage);
+    }
 
     setGenerating(true);
     setGeneratingMode(forceRandom ? "random" : "custom");
@@ -461,21 +492,33 @@ export function NewLeaderApp() {
 
     try {
       console.log('[GENERATE] Starting fetch to /api/leader/generate');
+      // Use ref as backup if state is somehow null (shouldn't happen but defensive)
+      const imageUrlToSend = selectedImageUrl || selectedImageUrlRef.current;
+
       console.log('[GENERATE] 📊 State before sending:');
-      console.log('[GENERATE]   - selectedImageUrl:', selectedImageUrl);
+      console.log('[GENERATE]   - selectedImageUrl (state):', selectedImageUrl);
+      console.log('[GENERATE]   - selectedImageUrl (ref):', selectedImageUrlRef.current);
+      console.log('[GENERATE]   - selectedImageUrl (final):', imageUrlToSend);
       console.log('[GENERATE]   - selectedImageIndex:', selectedImageIndex);
       console.log('[GENERATE]   - imageSelectionStage:', imageSelectionStage);
       console.log('[GENERATE]   - referenceImages count:', referenceImages.length);
+      console.log('[GENERATE]   - savingImage:', savingImage);
+
+      // CRITICAL: If user already selected an image, DON'T fetch new ones
+      // This prevents the backend from clearing the selection with a new images_fetching event
+      const shouldFetchPhotos = findPhotosEnabled && !imageUrlToSend && genName.trim().length > 0;
 
       const requestBody = {
         name,
         description,
         webSearch: useWebSearch,
-        findReferencePhotos: findPhotosEnabled && genName.trim().length > 0,
-        selectedImageUrl: selectedImageUrl || undefined, // Pass selected image directly
+        findReferencePhotos: shouldFetchPhotos, // Only fetch if NO image selected yet
+        selectedImageUrl: imageUrlToSend || undefined, // Pass selected image directly
       };
 
       console.log('[GENERATE] 📤 Request body:', requestBody);
+      console.log('[GENERATE] 📤 Request body.selectedImageUrl:', requestBody.selectedImageUrl);
+      console.log('[GENERATE] 📤 Stringified body:', JSON.stringify(requestBody));
 
       const res = await fetch("/api/leader/generate", {
         method: "POST",
@@ -668,18 +711,27 @@ export function NewLeaderApp() {
                   setGenStage("streaming");
                 } else if (json.type === "images_fetching") {
                   console.log('[UI] Images fetching started');
-                  setImageSelectionStage("fetching");
+                  // DON'T clear selected image if user already selected one
+                  if (!selectedImageUrl && !selectedImageUrlRef.current) {
+                    setImageSelectionStage("fetching");
+                  }
                 } else if (json.type === "images_ready") {
                   console.log('[UI] Images ready:', json.images?.length);
-                  if (json.images && json.images.length > 0) {
-                    setReferenceImages(json.images);
-                    setImageSelectionStage("selecting");
-                  } else {
-                    setImageSelectionStage("idle");
+                  // DON'T overwrite selected image if user already selected one
+                  if (!selectedImageUrl && !selectedImageUrlRef.current) {
+                    if (json.images && json.images.length > 0) {
+                      setReferenceImages(json.images);
+                      setImageSelectionStage("selecting");
+                    } else {
+                      setImageSelectionStage("idle");
+                    }
                   }
                 } else if (json.type === "images_failed") {
                   console.log('[UI] Image search failed');
-                  setImageSelectionStage("idle");
+                  // DON'T clear selected image if user already selected one
+                  if (!selectedImageUrl && !selectedImageUrlRef.current) {
+                    setImageSelectionStage("idle");
+                  }
                 } else if (json.type === "progress") {
                   const percentage = Math.min(99, Math.max(0, Math.round(json.percentage || 0)));
 
@@ -721,6 +773,7 @@ export function NewLeaderApp() {
                   console.log('[Navigation]   - leaderId:', leaderId);
                   console.log('[Navigation]   - selectedImageUrl from response:', imageUrlFromResponse);
                   console.log('[Navigation]   - selectedImageUrl from state:', selectedImageUrl);
+                  console.log('[Navigation]   - selectedImageUrl from ref:', selectedImageUrlRef.current);
 
                   if (leaderId && typeof leaderId === 'string') {
                     console.log('[Navigation] ✅ Navigating to leader detail page:', leaderId);
@@ -728,8 +781,8 @@ export function NewLeaderApp() {
                     // Build URL with avatar generation params
                     const params = new URLSearchParams({ generating: 'avatar' });
 
-                    // Use selectedImageUrl from state if response doesn't have it
-                    const finalImageUrl = imageUrlFromResponse || selectedImageUrl;
+                    // Use selectedImageUrl from multiple sources (response > state > ref)
+                    const finalImageUrl = imageUrlFromResponse || selectedImageUrl || selectedImageUrlRef.current;
 
                     if (finalImageUrl) {
                       console.log('[Navigation] 📸 Adding referenceImageUrl to params:', finalImageUrl);
@@ -764,7 +817,22 @@ export function NewLeaderApp() {
       console.error('[GENERATE] Error:', e);
       const msg = e instanceof Error ? e.message : "Unknown error";
       console.error('[GENERATE] Error message:', msg);
-      setGenError(msg);
+
+      // Parse error into user-friendly message
+      let userFriendlyError = msg;
+      if (msg.includes('rate limit') || msg.includes('429')) {
+        userFriendlyError = 'Rate limited. Please wait a moment and try again.';
+      } else if (msg.includes('timeout') || msg.includes('timed out')) {
+        userFriendlyError = 'Request timed out. Please try again.';
+      } else if (msg.includes('network') || msg.includes('Network') || msg.includes('Failed to fetch')) {
+        userFriendlyError = 'Network error. Check your connection and try again.';
+      } else if (msg.includes('Invalid JSON') || msg.includes('Unexpected token')) {
+        userFriendlyError = 'Invalid response from server. Please try again.';
+      } else if (msg.includes('403') || msg.includes('Forbidden')) {
+        userFriendlyError = 'Access denied. Please try again or contact support.';
+      }
+
+      setGenError(userFriendlyError);
       setGenProgress(0);
       setGenStage(null);
       setResearchStage(null);
@@ -992,7 +1060,7 @@ export function NewLeaderApp() {
                       size="sm"
                       className="h-7 gap-1 text-xs"
                       onClick={() => { setShowGenerator(false); setGenError(null); }}
-                      disabled={generating}
+                      disabled={generating || savingImage}
                     >
                       <X className="h-3 w-3" />
                       Cancel
@@ -1016,7 +1084,7 @@ export function NewLeaderApp() {
                           variant="default"
                           className="gap-2 rounded-full"
                           onClick={() => void handleGenerate(true)}
-                          disabled={generating}
+                          disabled={generating || savingImage}
                         >
                           {generatingMode === "random" ? (
                             <>
@@ -1182,7 +1250,7 @@ export function NewLeaderApp() {
                         "outline-none focus:ring-2 focus:ring-primary/20",
                         genError && "border-destructive/50",
                       )}
-                      disabled={generating}
+                      disabled={generating || savingImage}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" && !generating) {
                           e.preventDefault();
@@ -1331,11 +1399,11 @@ export function NewLeaderApp() {
                         {selectedImageIndex !== null && imageSelectionStage === "selected" ? (
                           <div className="space-y-3">
                             <div className="flex items-center justify-center">
-                              <div className="relative overflow-hidden rounded-xl border border-border/60 shadow-lg">
+                              <div className="relative overflow-hidden rounded-xl border border-border/60 shadow-lg max-w-[240px] w-full aspect-square">
                                 <img
-                                  src={referenceImages[selectedImageIndex].url}
+                                  src={referenceImages[selectedImageIndex].thumbnail}
                                   alt={referenceImages[selectedImageIndex].title}
-                                  className="h-64 w-64 object-cover"
+                                  className="h-full w-full object-cover"
                                 />
                                 <div className="absolute top-2 right-2 rounded-full bg-primary p-2 shadow-lg">
                                   <Check className="h-5 w-5 text-primary-foreground" />
@@ -1352,9 +1420,10 @@ export function NewLeaderApp() {
                               onClick={() => {
                                 setSelectedImageIndex(null);
                                 setSelectedImageUrl(null);
+                                selectedImageUrlRef.current = null; // Also clear ref
                                 setImageSelectionStage("selecting");
                               }}
-                              className="w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors"
+                              className="w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors py-2 min-h-[44px] flex items-center justify-center"
                             >
                               Change selection
                             </button>
@@ -1362,39 +1431,58 @@ export function NewLeaderApp() {
                         ) : (
                           <>
                             {/* Scrollable image grid */}
-                            <div className="relative -mx-1 overflow-x-auto pb-2">
-                              <div className="flex gap-2 px-1">
+                            <div className="relative -mx-1 overflow-x-auto pb-2 scroll-smooth scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
+                              <div className="flex gap-2 px-1 min-[400px]:gap-2.5 sm:gap-3">
                                 {referenceImages.map((img, i) => (
                                   <button
                                     key={i}
+                                    disabled={savingImage} // Disable all images while saving
                                     onClick={() => {
-                                      setSelectedImageIndex(i);
-                                      void continueGenerationWithImage(img.url);
+                                      if (!savingImage) {
+                                        setSelectedImageIndex(i);
+                                        void continueGenerationWithImage(img.url);
+                                      }
                                     }}
                                     className={cn(
                                       "relative flex-shrink-0 overflow-hidden rounded-lg border-2 transition-all duration-200",
+                                      "w-[100px] h-[100px] min-[400px]:w-[110px] min-[400px]:h-[110px] sm:w-[120px] sm:h-[120px]",
                                       selectedImageIndex === i
                                         ? "border-primary ring-2 ring-primary/20"
-                                        : "border-border hover:border-primary/50"
+                                        : "border-border hover:border-primary/50",
+                                      savingImage && "opacity-60 cursor-not-allowed"
                                     )}
-                                    style={{ width: "120px", height: "120px" }}
                                   >
                                     <img
                                       src={img.thumbnail}
                                       alt={img.title}
                                       className="h-full w-full object-cover"
+                                      onError={(e) => {
+                                        // Hide broken images completely
+                                        console.warn('[Image] Failed to load:', img.thumbnail, img.title);
+                                        const button = e.currentTarget.closest('button');
+                                        if (button) {
+                                          button.style.display = 'none';
+                                        }
+                                      }}
                                     />
                                     {selectedImageIndex === i && (
                                       <div className="absolute inset-0 flex items-center justify-center bg-primary/10">
-                                        <div className="rounded-full bg-primary p-1.5">
-                                          <Check className="h-4 w-4 text-primary-foreground" />
-                                        </div>
+                                        {savingImage ? (
+                                          <div className="rounded-full bg-primary p-1.5 animate-pulse">
+                                            <div className="h-4 w-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
+                                          </div>
+                                        ) : (
+                                          <div className="rounded-full bg-primary p-1.5">
+                                            <Check className="h-4 w-4 text-primary-foreground" />
+                                          </div>
+                                        )}
                                       </div>
                                     )}
                                   </button>
                                 ))}
                               </div>
                             </div>
+
                           </>
                         )}
                       </div>
@@ -1402,9 +1490,9 @@ export function NewLeaderApp() {
 
                     {/* Show selected image during generation */}
                     {selectedImageUrl && generating && (
-                      <div className="rounded-xl border border-border/60 bg-card/50 p-4">
-                        <div className="flex items-center gap-3">
-                          <div className="relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-lg border border-border/60">
+                      <div className="rounded-xl border border-border/60 bg-card/50 p-3 sm:p-4">
+                        <div className="flex items-center gap-2 sm:gap-3">
+                          <div className="relative h-14 w-14 sm:h-16 sm:w-16 flex-shrink-0 overflow-hidden rounded-lg border border-border/60">
                             <img
                               src={selectedImageUrl}
                               alt="Selected reference"
@@ -1445,10 +1533,10 @@ export function NewLeaderApp() {
                         "outline-none focus:ring-2 focus:ring-primary/20",
                         genError && "border-destructive/50",
                       )}
-                      disabled={generating}
+                      disabled={generating || savingImage}
                       spellCheck={false}
                       onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey && !generating) {
+                        if (e.key === "Enter" && !e.shiftKey && !generating && !savingImage) {
                           e.preventDefault();
                           void handleGenerate(false);
                         }
@@ -1459,7 +1547,7 @@ export function NewLeaderApp() {
                         variant="outline"
                         className="gap-2 rounded-full"
                         onClick={() => void handleGenerate(false)}
-                        disabled={generating}
+                        disabled={generating || savingImage}
                       >
                         {generatingMode === "custom" ? (
                           <>
@@ -1608,7 +1696,24 @@ export function NewLeaderApp() {
                         )}
                       </div>
                     )}
-                    {genError && <p className="text-sm text-destructive">{genError}</p>}
+                    {genError && (
+                      <div className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2.5">
+                        <div className="flex items-start gap-2">
+                          <svg className="h-4 w-4 text-destructive mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium text-destructive">{genError}</p>
+                            <button
+                              onClick={() => setGenError(null)}
+                              className="mt-1.5 text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
+                            >
+                              Dismiss
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                     <p className="text-xs text-muted-foreground">
                       Uses OpenAI Structured Outputs to generate a complete Leader Bible JSON.
                     </p>

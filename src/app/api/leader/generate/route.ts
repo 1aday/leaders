@@ -20,17 +20,22 @@ type Body = {
 export async function POST(req: Request) {
   try {
     const body = (await req.json()) as Partial<Body>;
+
+    console.log("[Generate API] 📥 RAW Request body:", JSON.stringify(body, null, 2));
+
     const name = typeof body.name === "string" ? body.name : undefined;
     const description = typeof body.description === "string" ? body.description : undefined;
     const webSearch = body.webSearch === true;
     const findReferencePhotos = body.findReferencePhotos === true;
     const preSelectedImageUrl = typeof body.selectedImageUrl === "string" ? body.selectedImageUrl : undefined;
 
-    console.log("[Generate API] 📥 Request received:");
+    console.log("[Generate API] 📥 Parsed values:");
     console.log("[Generate API]   - name:", name);
     console.log("[Generate API]   - webSearch:", webSearch);
     console.log("[Generate API]   - findReferencePhotos:", findReferencePhotos);
-    console.log("[Generate API]   - selectedImageUrl:", preSelectedImageUrl || 'NONE');
+    console.log("[Generate API]   - body.selectedImageUrl RAW:", body.selectedImageUrl);
+    console.log("[Generate API]   - body.selectedImageUrl type:", typeof body.selectedImageUrl);
+    console.log("[Generate API]   - preSelectedImageUrl:", preSelectedImageUrl || 'NONE');
 
     // Create a TransformStream for Server-Sent Events
     const { readable, writable } = new TransformStream();

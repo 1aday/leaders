@@ -377,8 +377,11 @@ export async function generateAvatarPromptWithOpenAI(opts: {
     prompt = buildVisualAttributesPrompt({ physical, visualStyle, isRegeneration: opts.isRegeneration });
   }
 
-  // When reference image is provided, keep the same prompt
-  // The image_input will guide the generation
+  // When reference image is provided, use img2img-specific prompt format
+  // This tells flux-dev to transform the reference photo into a professional headshot
+  if (opts.referenceImageUrl && name) {
+    prompt = `Here is a photo of ${name}. Turn it into a photorealistic studio headshot: confident approachable expression, 85mm portrait lens, soft key light with subtle rim light, clean neutral gray gradient background, head and shoulders framing, looking at camera, high detail, natural skin texture, professional leader aesthetic.`;
+  }
 
   return {
     prompt,
@@ -527,7 +530,7 @@ async function generateAvatarWithFallbackModel(opts: {
 }
 
 /**
- * Image generation with nano-banana-pro (when reference image provided)
+ * Image generation with nano-banana-pro (img2img when reference image provided)
  */
 async function generateAvatarWithNanoBananaPro(opts: {
   prompt: string;
@@ -565,38 +568,91 @@ async function generateAvatarWithNanoBananaPro(opts: {
   console.log(`[nano-banana-pro] 📸 image_input: [${opts.imageInput}]`);
   console.log(`[nano-banana-pro] ✍️  prompt: ${opts.prompt.substring(0, 100)}...`);
 
-  const createRes = await fetch("https://api.replicate.com/v1/predictions", {
-    method: "POST",
-    headers: {
-      Authorization: `Token ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      version: latestVersion, // Just the version ID hash, not owner/name:version
-      input: {
-        prompt: opts.prompt,
-        image_input: [opts.imageInput], // Array of image URLs
-        aspect_ratio: opts.aspectRatio ?? "1:1",
-        output_format: opts.outputFormat ?? "png",
-        resolution: "2K",
-        safety_filter_level: "block_only_high",
-      },
-    }),
-  });
+  // Retry logic for rate limiting (429 errors)
+  let createRes: Response | null = null;
+  let lastError = "";
+  const maxRetries = 3;
 
-  if (!createRes.ok) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    createRes = await fetch("https://api.replicate.com/v1/predictions", {
+      method: "POST",
+      headers: {
+        Authorization: `Token ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        version: latestVersion,
+        input: {
+          prompt: opts.prompt,
+          image_input: [opts.imageInput], // Array of image URLs
+          aspect_ratio: opts.aspectRatio ?? "1:1",
+          output_format: opts.outputFormat ?? "png",
+          resolution: "2K",
+          safety_filter_level: "block_only_high",
+        },
+      }),
+    });
+
+    if (createRes.ok) {
+      break; // Success!
+    }
+
     const text = await createRes.text().catch(() => "");
-    throw new Error(`Replicate create prediction failed (${createRes.status}): ${text || createRes.statusText}`);
+    lastError = text;
+
+    // Handle rate limiting (429)
+    if (createRes.status === 429) {
+      try {
+        const errorData = JSON.parse(text);
+        const retryAfter = errorData.retry_after || 2; // Default to 2s
+        console.log(`[nano-banana-pro] ⏳ Rate limited (attempt ${attempt}/${maxRetries}), waiting ${retryAfter}s...`);
+
+        if (attempt < maxRetries) {
+          await new Promise(r => setTimeout(r, (retryAfter + 0.5) * 1000)); // Wait retry_after + 0.5s buffer
+          continue;
+        }
+      } catch {
+        // Failed to parse error, treat as normal error
+      }
+    }
+
+    // Non-429 error or final retry attempt
+    console.error(`[nano-banana-pro] ❌ Replicate create prediction failed (attempt ${attempt}/${maxRetries})`);
+    console.error(`[nano-banana-pro] Status: ${createRes.status}`);
+    console.error(`[nano-banana-pro] Response: ${text}`);
+
+    if (attempt === maxRetries) {
+      console.error(`[nano-banana-pro] Model: ${modelOwner}/${modelName}`);
+      throw new Error(`Replicate create prediction failed (${createRes.status}): ${text || createRes.statusText}`);
+    }
+  }
+
+  if (!createRes || !createRes.ok) {
+    throw new Error(`Replicate create prediction failed after ${maxRetries} attempts: ${lastError}`);
   }
 
   const created = (await createRes.json()) as ReplicatePrediction;
   if (!created?.id) throw new Error("Replicate create prediction missing id");
 
-  const deadline = Date.now() + 90_000; // 90s timeout
+  console.log(`[nano-banana-pro] ⏳ Prediction created: ${created.id}`);
+  console.log(`[nano-banana-pro] 🕐 nano-banana-pro is slow - this may take 2-3 minutes...`);
+  const startTime = Date.now();
+  const deadline = Date.now() + 240_000; // 4 minutes timeout (nano-banana-pro is VERY slow)
   let prediction: ReplicatePrediction = created;
+  let pollCount = 0;
   while (prediction.status === "starting" || prediction.status === "processing") {
-    if (Date.now() > deadline) throw new Error("Replicate prediction timed out");
-    await new Promise((r) => setTimeout(r, 1500));
+    if (Date.now() > deadline) {
+      const elapsed = Math.round((Date.now() - startTime) / 1000);
+      throw new Error(`nano-banana-pro timed out after ${elapsed}s`);
+    }
+    await new Promise((r) => setTimeout(r, 3000)); // Poll every 3s
+    pollCount++;
+
+    // Log progress every 30 seconds
+    if (pollCount % 10 === 0) {
+      const elapsed = Math.round((Date.now() - startTime) / 1000);
+      console.log(`[nano-banana-pro] ⏳ Still processing... ${elapsed}s elapsed (status: ${prediction.status})`);
+    }
 
     const pollRes = await fetch(`https://api.replicate.com/v1/predictions/${created.id}`, {
       headers: {

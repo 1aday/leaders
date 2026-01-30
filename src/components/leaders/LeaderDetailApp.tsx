@@ -321,7 +321,7 @@ function CopyButton({ text, label }: { text: string; label?: string }) {
 // Long Text Block
 function LongTextBlock({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl bg-muted/10 p-6 border border-border/30">
+    <div className="rounded-xl bg-muted/10 p-3 sm:p-4 lg:p-6 border border-border/30">
       <div className="mb-3 flex items-center justify-between">
         <span className="text-xs font-semibold text-foreground/70 uppercase tracking-wide">
           {label}
@@ -363,11 +363,13 @@ function Section({
   className?: string;
 }) {
   return (
-    <div className={className}>
-      <h3 className="mb-4 text-sm font-semibold text-foreground/80 uppercase tracking-wide">
+    <div className={cn("min-w-0 max-w-full", className)}>
+      <h3 className="mb-3 text-sm font-semibold text-foreground/80 uppercase tracking-wide break-words">
         {title}
       </h3>
-      {children}
+      <div className="min-w-0 max-w-full overflow-hidden">
+        {children}
+      </div>
     </div>
   );
 }
@@ -413,7 +415,7 @@ function RenderValue({ value, depth = 0 }: { value: unknown; depth?: number }) {
     return (
       <div className="space-y-3">
         {value.map((item, i) => (
-          <div key={i} className="rounded-xl bg-muted/10 p-4 border border-border/30">
+          <div key={i} className="rounded-xl bg-muted/10 p-3 sm:p-4 border border-border/30">
             <RenderValue value={item} depth={depth + 1} />
           </div>
         ))}
@@ -431,10 +433,30 @@ function RenderValue({ value, depth = 0 }: { value: unknown; depth?: number }) {
     );
 
     return (
-      <div className="space-y-6">
+      <div className="space-y-4">
         {scalars.length > 0 && (
           <div className="rounded-xl border border-border/50 overflow-hidden shadow-sm">
-            <table className="w-full">
+            {/* Mobile/Tablet: stacked layout - label above content */}
+            <div className="lg:hidden divide-y divide-border/30">
+              {scalars.map(([k, v], idx) => (
+                <div
+                  key={k}
+                  className={cn(
+                    "px-2 py-2.5 transition-colors min-w-0",
+                    idx % 2 === 0 ? "bg-muted/5" : "bg-transparent"
+                  )}
+                >
+                  <div className="text-xs font-medium text-muted-foreground mb-2 break-words">
+                    {titleCase(k)}
+                  </div>
+                  <div className="text-sm text-foreground leading-relaxed break-words whitespace-normal">
+                    {String(v)}
+                  </div>
+                </div>
+              ))}
+            </div>
+            {/* Desktop: table layout */}
+            <table className="hidden lg:table w-full table-fixed">
               <tbody>
                 {scalars.map(([k, v], idx) => (
                   <tr
@@ -444,10 +466,10 @@ function RenderValue({ value, depth = 0 }: { value: unknown; depth?: number }) {
                       idx % 2 === 0 ? "bg-muted/5" : "bg-transparent"
                     )}
                   >
-                    <td className="w-[200px] px-6 py-3.5 text-sm font-medium text-muted-foreground align-top border-r border-border/30">
+                    <td className="w-[200px] px-4 py-3 text-sm font-medium text-muted-foreground align-top border-r border-border/30 break-words">
                       {titleCase(k)}
                     </td>
-                    <td className="px-6 py-3.5 text-sm text-foreground">
+                    <td className="px-4 py-3 text-sm text-foreground break-words whitespace-normal">
                       {String(v)}
                     </td>
                   </tr>
@@ -457,7 +479,7 @@ function RenderValue({ value, depth = 0 }: { value: unknown; depth?: number }) {
           </div>
         )}
         {complex.map(([k, v]) => (
-          <Section key={k} title={titleCase(k)} className="mt-6 pt-6 border-t border-border/40">
+          <Section key={k} title={titleCase(k)} className="mt-4 pt-4 border-t border-border/40">
             <RenderValue value={v} depth={depth + 1} />
           </Section>
         ))}
@@ -579,9 +601,34 @@ export function LeaderDetailApp({ id }: { id: string }) {
         });
 
         if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          console.error('[Avatar] Generation failed:', err);
+          const errorText = await res.text();
+          let errorMessage = `HTTP ${res.status}`;
+          let userFriendlyMessage = '';
+
+          try {
+            const errorJson = JSON.parse(errorText);
+            errorMessage = errorJson.error || errorJson.message || errorMessage;
+
+            // Parse common errors into friendly messages
+            if (errorMessage.includes('rate limit') || errorMessage.includes('429')) {
+              userFriendlyMessage = 'Rate limited. Please wait a moment and try again.';
+            } else if (errorMessage.includes('timeout') || errorMessage.includes('timed out')) {
+              userFriendlyMessage = 'Generation took too long. This model can be slow - try again.';
+            } else if (errorMessage.includes('403') || errorMessage.includes('Forbidden')) {
+              userFriendlyMessage = 'Image access blocked. Try a different reference image.';
+            } else if (errorMessage.includes('Invalid') || errorMessage.includes('invalid')) {
+              userFriendlyMessage = 'Invalid request. Please check your inputs.';
+            } else {
+              userFriendlyMessage = errorMessage;
+            }
+          } catch {
+            errorMessage = errorText || errorMessage;
+            userFriendlyMessage = errorMessage;
+          }
+
+          console.error('[Avatar] Generation failed:', { status: res.status, error: errorMessage });
           setGeneratingAvatar(false);
+          setAvatarError(userFriendlyMessage);
           router.replace(`/leaders/${id}`);
           return;
         }
@@ -595,8 +642,25 @@ export function LeaderDetailApp({ id }: { id: string }) {
         setGeneratingAvatar(false);
         router.replace(`/leaders/${id}`);
       } catch (e) {
-        console.error('[Avatar] Generation error:', e);
+        const errorMessage = e instanceof Error ? e.message : 'Unknown error';
+        let userFriendlyMessage = errorMessage;
+
+        // Parse common errors into friendly messages
+        if (errorMessage.includes('rate limit') || errorMessage.includes('429')) {
+          userFriendlyMessage = 'Rate limited. Please wait a moment and try again.';
+        } else if (errorMessage.includes('timeout') || errorMessage.includes('timed out')) {
+          userFriendlyMessage = 'Generation took too long. This model can be slow - try again.';
+        } else if (errorMessage.includes('403') || errorMessage.includes('Forbidden')) {
+          userFriendlyMessage = 'Image access blocked. Try a different reference image.';
+        } else if (errorMessage.includes('network') || errorMessage.includes('Network')) {
+          userFriendlyMessage = 'Network error. Check your connection and try again.';
+        } else if (errorMessage.includes('Failed to fetch')) {
+          userFriendlyMessage = 'Connection failed. Please try again.';
+        }
+
+        console.error('[Avatar] Generation error:', errorMessage, e);
         setGeneratingAvatar(false);
+        setAvatarError(userFriendlyMessage);
         router.replace(`/leaders/${id}`);
       }
     })();
@@ -718,7 +782,7 @@ export function LeaderDetailApp({ id }: { id: string }) {
   const [loadingChatInstructions, setLoadingChatInstructions] = React.useState(false);
 
   // Show/hide scoring reasoning breakdown
-  const [showScoringReasoning, setShowScoringReasoning] = React.useState(true);
+  const [showScoringReasoning, setShowScoringReasoning] = React.useState(false);
 
   // Chat scroll state - auto-scroll to bottom on new messages
   const chatScrollRef = React.useRef<HTMLDivElement>(null);
@@ -1371,7 +1435,7 @@ export function LeaderDetailApp({ id }: { id: string }) {
     <div className="min-h-screen bg-background overflow-x-hidden">
       {/* Top Navigation */}
       <nav className="sticky top-0 z-50 border-b border-border/40 bg-background/80 backdrop-blur-lg">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 h-16 flex items-center justify-between">
+        <div className="mx-auto max-w-7xl px-2 sm:px-3 lg:px-4 h-16 flex items-center justify-between">
           {/* Left: Back button */}
           <Button asChild variant="ghost" size="sm" className="gap-2 text-muted-foreground hover:text-foreground">
             <Link href="/">
@@ -1412,7 +1476,7 @@ export function LeaderDetailApp({ id }: { id: string }) {
         </div>
       </nav>
 
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 py-8">
+      <div className="mx-auto max-w-7xl px-2 sm:px-3 lg:px-4 py-8">
 
         <div className="grid gap-10 lg:grid-cols-[340px_1fr]">
           {/* LEFT SIDEBAR */}
@@ -1469,8 +1533,48 @@ export function LeaderDetailApp({ id }: { id: string }) {
               </Button>
             </div>
             
-            {avatarError && <p className="text-xs text-destructive">{avatarError}</p>}
-            {introVideoError && <p className="text-xs text-destructive">{introVideoError}</p>}
+            {avatarError && (
+              <div className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2.5">
+                <div className="flex items-start gap-2">
+                  <svg className="h-4 w-4 text-destructive mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-destructive">{avatarError}</p>
+                    <button
+                      onClick={() => {
+                        setAvatarError(null);
+                        const params = new URLSearchParams(window.location.search);
+                        if (params.get('generating') === 'avatar') {
+                          window.location.reload();
+                        }
+                      }}
+                      className="mt-1.5 text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
+                    >
+                      Try again
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+            {introVideoError && (
+              <div className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2.5">
+                <div className="flex items-start gap-2">
+                  <svg className="h-4 w-4 text-destructive mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-destructive">{introVideoError}</p>
+                    <button
+                      onClick={() => setIntroVideoError(null)}
+                      className="mt-1.5 text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
             {generatingIntroVideo && introVideoPredictionId && (
               <p className="text-[10px] text-muted-foreground font-mono break-all">{introVideoPredictionId}</p>
             )}
@@ -1538,7 +1642,7 @@ export function LeaderDetailApp({ id }: { id: string }) {
 
             {/* Identity */}
             <div className="pt-2">
-              <h1 className="font-display text-3xl font-semibold tracking-tight text-foreground">
+              <h1 className="font-display text-2xl sm:text-3xl font-semibold tracking-tight text-foreground">
                 {leader.name}
               </h1>
               {leader.tagline && (
@@ -1570,7 +1674,7 @@ export function LeaderDetailApp({ id }: { id: string }) {
             {/* Scores */}
             {scores ? (
               <>
-                <div className="grid grid-cols-4 gap-3 py-4 border-y border-border/40">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 py-4 border-y border-border/40">
                   {typeof scores.character === "number" && (
                     <div className="text-center">
                       <div className="text-2xl font-semibold tabular-nums">{scores.character}</div>
@@ -1822,7 +1926,7 @@ export function LeaderDetailApp({ id }: { id: string }) {
                   onScroll={handleChatScroll}
                   className="max-h-[400px] overflow-y-auto scroll-smooth overscroll-contain scrollbar-thin"
                 >
-                  <div className="space-y-4 p-6 min-h-[120px]">
+                  <div className="space-y-4 p-3 sm:p-4 lg:p-6 min-h-[120px]">
                     {chatMessages.length === 0 ? (
                       <p className="text-muted-foreground">Start the conversation…</p>
                     ) : (
@@ -1843,6 +1947,7 @@ export function LeaderDetailApp({ id }: { id: string }) {
                                     src={leader.profilePicUrl}
                                     alt={leader.name}
                                     fill
+                                    sizes="32px"
                                     className="object-cover"
                                   />
                                 </div>
@@ -1928,92 +2033,98 @@ export function LeaderDetailApp({ id }: { id: string }) {
 
             {/* Tabs */}
             {sections.length > 0 && (
-              <section>
-                <Tabs defaultValue={sections[0]?.key} className="w-full">
-                  <div className="relative mb-6">
-                    {/* Left gradient fade indicator */}
-                    <div
-                      className={cn(
-                        "absolute left-0 top-0 bottom-0 w-12 bg-gradient-to-r from-background via-background/80 to-transparent z-10 pointer-events-none transition-opacity duration-300",
-                        canScrollLeft ? "opacity-100" : "opacity-0"
-                      )}
-                      aria-hidden="true"
-                    />
+              <section className="scroll-smooth">
+                <Tabs defaultValue={sections[0]?.key} className="w-full relative">
+                  <div>
+                    <div className="relative mb-3">
+                      {/* Left gradient fade indicator */}
+                      <div
+                        className={cn(
+                          "absolute left-0 top-0 bottom-0 w-12 bg-gradient-to-r from-background via-background/80 to-transparent z-10 pointer-events-none transition-opacity duration-300",
+                          canScrollLeft ? "opacity-100" : "opacity-0"
+                        )}
+                        aria-hidden="true"
+                      />
 
-                    {/* Right gradient fade indicator */}
-                    <div
-                      className={cn(
-                        "absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-background via-background/80 to-transparent z-10 pointer-events-none transition-opacity duration-300",
-                        canScrollRight ? "opacity-100" : "opacity-0"
-                      )}
-                      aria-hidden="true"
-                    />
+                      {/* Right gradient fade indicator */}
+                      <div
+                        className={cn(
+                          "absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-background via-background/80 to-transparent z-10 pointer-events-none transition-opacity duration-300",
+                          canScrollRight ? "opacity-100" : "opacity-0"
+                        )}
+                        aria-hidden="true"
+                      />
 
-                    {/* Left scroll button - subtle, appears on hover */}
-                    <button
-                      type="button"
-                      onClick={() => scrollTabs("left")}
-                      className={cn(
-                        "absolute left-2 top-1/2 -translate-y-1/2 z-20 flex h-7 w-7 items-center justify-center rounded-full bg-card/95 backdrop-blur border border-border/60 shadow-sm text-muted-foreground hover:text-primary hover:border-primary/30 hover:shadow-md transition-all duration-200",
-                        canScrollLeft ? "opacity-0 hover:opacity-100" : "opacity-0 pointer-events-none"
-                      )}
-                      aria-label="Scroll tabs left"
-                    >
-                      <ChevronLeft className="h-3.5 w-3.5" />
-                    </button>
+                      {/* Left scroll button */}
+                      <button
+                        type="button"
+                        onClick={() => scrollTabs("left")}
+                        className={cn(
+                          "absolute left-2 top-1/2 -translate-y-1/2 z-20 flex h-7 w-7 items-center justify-center rounded-full bg-card/95 backdrop-blur border border-border/60 shadow-sm text-muted-foreground hover:text-primary hover:border-primary/30 hover:shadow-md transition-all duration-200",
+                          canScrollLeft ? "opacity-0 hover:opacity-100" : "opacity-0 pointer-events-none"
+                        )}
+                        aria-label="Scroll tabs left"
+                      >
+                        <ChevronLeft className="h-3.5 w-3.5" />
+                      </button>
 
-                    {/* Right scroll button - subtle, appears on hover */}
-                    <button
-                      type="button"
-                      onClick={() => scrollTabs("right")}
-                      className={cn(
-                        "absolute right-2 top-1/2 -translate-y-1/2 z-20 flex h-7 w-7 items-center justify-center rounded-full bg-card/95 backdrop-blur border border-border/60 shadow-sm text-muted-foreground hover:text-primary hover:border-primary/30 hover:shadow-md transition-all duration-200",
-                        canScrollRight ? "opacity-0 hover:opacity-100" : "opacity-0 pointer-events-none"
-                      )}
-                      aria-label="Scroll tabs right"
-                    >
-                      <ChevronRight className="h-3.5 w-3.5" />
-                    </button>
+                      {/* Right scroll button */}
+                      <button
+                        type="button"
+                        onClick={() => scrollTabs("right")}
+                        className={cn(
+                          "absolute right-2 top-1/2 -translate-y-1/2 z-20 flex h-7 w-7 items-center justify-center rounded-full bg-card/95 backdrop-blur border border-border/60 shadow-sm text-muted-foreground hover:text-primary hover:border-primary/30 hover:shadow-md transition-all duration-200",
+                          canScrollRight ? "opacity-0 hover:opacity-100" : "opacity-0 pointer-events-none"
+                        )}
+                        aria-label="Scroll tabs right"
+                      >
+                        <ChevronRight className="h-3.5 w-3.5" />
+                      </button>
 
-                    {/* Scrollable tabs container with smooth scroll and drag support */}
-                    <div
-                      ref={tabsScrollRef}
-                      className={cn(
-                        "overflow-x-auto scrollbar-none scroll-smooth select-none",
-                        isDragging ? "cursor-grabbing" : "cursor-grab"
-                      )}
-                      style={{ scrollBehavior: 'smooth' }}
-                      onMouseDown={handleTabsMouseDown}
-                      onMouseMove={handleTabsMouseMove}
-                      onMouseUp={handleTabsMouseUpOrLeave}
-                      onMouseLeave={handleTabsMouseUpOrLeave}
-                      onClick={handleTabsClick}
-                    >
-                      <TabsList className="inline-flex h-auto gap-2 bg-transparent p-1 justify-start min-w-full">
-                        {sections.map((s) => (
-                          <TabsTrigger
-                            key={s.key}
-                            value={s.key}
-                            className="relative shrink-0 px-5 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-all duration-200 rounded-lg border border-transparent data-[state=active]:text-[oklch(0.55_0.16_45)] data-[state=active]:font-semibold after:absolute after:bottom-0 after:left-2 after:right-2 after:h-0.5 after:rounded-full after:bg-[oklch(0.55_0.16_45)] after:opacity-0 after:transition-opacity after:duration-200 data-[state=active]:after:opacity-100 hover:bg-accent/5"
-                          >
-                            {s.title}
-                          </TabsTrigger>
-                        ))}
-                      </TabsList>
+                      {/* Horizontal scrollable tabs */}
+                      <div
+                        ref={tabsScrollRef}
+                        className={cn(
+                          "overflow-x-auto scrollbar-none scroll-smooth select-none",
+                          isDragging ? "cursor-grabbing" : "cursor-grab"
+                        )}
+                        style={{ scrollBehavior: 'smooth' }}
+                        onMouseDown={handleTabsMouseDown}
+                        onMouseMove={handleTabsMouseMove}
+                        onMouseUp={handleTabsMouseUpOrLeave}
+                        onMouseLeave={handleTabsMouseUpOrLeave}
+                        onClick={handleTabsClick}
+                      >
+                        <TabsList className="inline-flex h-auto gap-2 bg-transparent p-1 justify-start min-w-full">
+                          {sections.map((s) => (
+                            <TabsTrigger
+                              key={s.key}
+                              value={s.key}
+                              className="relative shrink-0 px-5 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-all duration-200 rounded-lg border border-transparent data-[state=active]:text-[oklch(0.55_0.16_45)] data-[state=active]:font-semibold after:absolute after:bottom-0 after:left-2 after:right-2 after:h-0.5 after:rounded-full after:bg-[oklch(0.55_0.16_45)] after:opacity-0 after:transition-opacity after:duration-200 data-[state=active]:after:opacity-100 hover:bg-accent/5"
+                            >
+                              {s.title}
+                            </TabsTrigger>
+                          ))}
+                        </TabsList>
+                      </div>
+                    </div>
+
+                    <div className="relative min-w-0 max-w-full overflow-hidden">
+                      {sections.map((s) => (
+                        <TabsContent
+                          key={s.key}
+                          value={s.key}
+                          className="mt-0 text-left scroll-mt-0 focus:outline-none data-[state=active]:animate-in data-[state=active]:fade-in-0 data-[state=active]:duration-300"
+                        >
+                          <div className="rounded-2xl bg-muted/10 p-3 sm:p-4 text-left border border-border/20 overflow-hidden">
+                            <div className="min-w-0 max-w-full">
+                              <RenderValue value={s.value} />
+                            </div>
+                          </div>
+                        </TabsContent>
+                      ))}
                     </div>
                   </div>
-
-                  {sections.map((s) => (
-                    <TabsContent
-                      key={s.key}
-                      value={s.key}
-                      className="mt-0 text-left animate-in fade-in-0 slide-in-from-bottom-2 duration-300 scroll-mt-0 focus:outline-none"
-                    >
-                      <div className="rounded-2xl bg-muted/10 p-8 text-left border border-border/20 min-h-[200px]">
-                        <RenderValue value={s.value} />
-                      </div>
-                    </TabsContent>
-                  ))}
                 </Tabs>
               </section>
             )}

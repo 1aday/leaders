@@ -1,8 +1,9 @@
 import "server-only";
 
 export interface ReferenceImage {
-  url: string;
-  thumbnail: string;
+  url: string; // For displaying in UI (will be Supabase URL after download)
+  thumbnail: string; // SerpAPI thumbnail (temporary)
+  original: string; // Original full-size URL for downloading
   title: string;
   source: string;
   width: number;
@@ -71,8 +72,9 @@ export async function fetchReferenceImages(
       }
 
       results.push({
-        url: img.original,
+        url: img.original, // For backward compatibility
         thumbnail: img.thumbnail,
+        original: img.original, // Full-size URL for downloading
         title: img.title || personName,
         source: img.source || "Unknown",
         width: img.original_width || 800,
