@@ -3,6 +3,8 @@
  * Replaces localStorage with direct API calls to Supabase.
  */
 
+import { calculateCompositeScore } from "@/lib/utils";
+
 export type LeaderSummary = {
   /** Stable ID used in routes. Prefer metadata.leaderId when present. */
   id: string;
@@ -309,10 +311,8 @@ export function deriveLeaderSummary(parsed: unknown, rawJson: string): Omit<Lead
     ? scores.jobsRuleMultiplier
     : 1.0;
 
-  // Import calculateCompositeScore from utils
-  const compositeScore = character && competence && impact
-    ? Math.round((character + competence + impact) / 3 * jobsMultiplier)
-    : undefined;
+  // Calculate composite score using correct weighted formula (Character 39%, Competence 30%, Impact 31%)
+  const compositeScore = calculateCompositeScore(character, competence, impact, jobsMultiplier);
 
   // Try to get profile pic URL from various places in the schema
   // Filter out placeholder URLs that aren't real assets
