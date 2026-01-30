@@ -304,17 +304,11 @@ export function NewLeaderApp() {
     const debounceTimer = setTimeout(() => {
       console.log('[Images] Starting fetch for:', genName);
 
-      // Only reset if user hasn't selected an image yet
-      // Once selected, keep it unless toggle is disabled
-      if (imageSelectionStage !== "selected") {
-        setImageSelectionStage("fetching");
-        setReferenceImages([]);
-        setSelectedImageIndex(null);
-        setSelectedImageUrl(null);
-      } else {
-        console.log('[Images] Keeping existing selection, skipping new fetch');
-        return; // Don't fetch new images if already selected
-      }
+      // Reset image selection state to fetch new images
+      setImageSelectionStage("fetching");
+      setReferenceImages([]);
+      setSelectedImageIndex(null);
+      setSelectedImageUrl(null);
 
       fetch("/api/leader/fetch-images", {
         method: "POST",
@@ -356,7 +350,7 @@ export function NewLeaderApp() {
     }, 800); // 800ms debounce
 
     return () => clearTimeout(debounceTimer);
-  }, [findPhotosEnabled, genName, genDescription, generating]);
+  }, [findPhotosEnabled, genName, imageSearchTerm, genDescription, generating]);
 
   // Helper function to save image selection
   const continueGenerationWithImage = React.useCallback(async (imageUrl: string) => {
