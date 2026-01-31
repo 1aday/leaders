@@ -26,8 +26,8 @@ export async function fetchReferenceImages(
   }
 
   try {
-    // Build search query - focus on professional headshots
-    const query = `${personName} professional headshot`;
+    // Use search query exactly as provided (no filters)
+    const query = personName;
 
     // Construct SerpAPI URL with parameters
     const params = new URLSearchParams({
