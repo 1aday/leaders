@@ -175,6 +175,7 @@ export function NewLeaderApp() {
     title: string;
     source: string;
   }>>([]);
+  const [displayedImageCount, setDisplayedImageCount] = React.useState(12); // Show 12 images initially
   const [selectedImageIndex, setSelectedImageIndex] = React.useState<number | null>(null);
   const [selectedImageUrl, setSelectedImageUrl] = React.useState<string | null>(null);
   const selectedImageUrlRef = React.useRef<string | null>(null); // Backup ref - NEVER gets cleared accidentally
@@ -1511,123 +1512,177 @@ export function NewLeaderApp() {
 
                     {/* Image Selection Gallery - Appears when images are ready */}
                     {(imageSelectionStage === "selecting" || imageSelectionStage === "selected") && referenceImages.length > 0 && !generating && (
-                      <div className="animate-in fade-in slide-in-from-top-2 duration-300 rounded-xl border border-border/60 bg-card/50 p-4">
-                        <div className="mb-3 flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10">
-                              <span className="text-sm">📸</span>
-                            </div>
-                            <div>
-                              <div className="text-sm font-medium text-foreground">
-                                Select Reference Photo
+                      <div className="animate-in fade-in slide-in-from-top-2 duration-500 rounded-2xl border border-border/40 bg-gradient-to-br from-card via-card/95 to-card/90 backdrop-blur-sm overflow-hidden">
+                        {/* Header with refined typography */}
+                        <div className="px-6 py-5 border-b border-border/30 bg-gradient-to-r from-primary/[0.02] to-transparent">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="space-y-1 flex-1">
+                              <div className="flex items-center gap-2.5">
+                                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 ring-1 ring-primary/10">
+                                  <span className="text-base">📸</span>
+                                </div>
+                                <h3 className="text-base font-semibold tracking-tight text-foreground">
+                                  Choose Your Reference
+                                </h3>
                               </div>
-                              <div className="text-xs text-muted-foreground">
-                                Found {referenceImages.length} images • Scroll to see more
-                              </div>
+                              <p className="text-sm text-muted-foreground/80 pl-10.5">
+                                {referenceImages.length} {referenceImages.length === 1 ? 'image' : 'images'} found
+                              </p>
                             </div>
+                            {imageSelectionStage === "selecting" && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => void continueGenerationWithoutImage()}
+                                className="h-8 gap-2 rounded-lg text-xs hover:bg-muted/50 transition-all"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                                Skip Photos
+                              </Button>
+                            )}
                           </div>
-                          {imageSelectionStage === "selecting" && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => void continueGenerationWithoutImage()}
-                              className="h-7 gap-1.5 rounded-full text-xs"
-                            >
-                              <X className="h-3 w-3" />
-                              Skip
-                            </Button>
-                          )}
                         </div>
 
                         {/* Show selected image prominently after selection */}
                         {selectedImageIndex !== null && imageSelectionStage === "selected" ? (
-                          <div className="space-y-3">
-                            <div className="flex items-center justify-center">
-                              <div className="relative overflow-hidden rounded-xl border border-border/60 shadow-lg max-w-[240px] w-full aspect-square">
+                          <div className="p-6 space-y-4">
+                            <div className="flex items-center justify-center py-4">
+                              <div className="relative overflow-hidden rounded-2xl ring-2 ring-primary/20 shadow-2xl shadow-primary/10 max-w-[280px] w-full aspect-square group">
+                                <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                                 <img
                                   src={referenceImages[selectedImageIndex].thumbnail}
                                   alt={referenceImages[selectedImageIndex].title}
-                                  className="h-full w-full object-cover"
+                                  className="h-full w-full object-cover transform group-hover:scale-105 transition-transform duration-500"
                                 />
-                                <div className="absolute top-2 right-2 rounded-full bg-primary p-2 shadow-lg">
+                                <div className="absolute top-3 right-3 rounded-full bg-primary p-2.5 shadow-xl ring-4 ring-background/50">
                                   <Check className="h-5 w-5 text-primary-foreground" />
                                 </div>
                               </div>
                             </div>
-                            <div className="flex items-center gap-2 rounded-lg bg-primary/10 px-3 py-2">
-                              <Check className="h-4 w-4 text-primary" />
-                              <span className="text-xs text-foreground">
-                                Using this photo as reference for avatar generation
+                            <div className="flex items-center gap-3 rounded-xl bg-gradient-to-r from-primary/10 via-primary/5 to-transparent px-4 py-3 ring-1 ring-primary/10">
+                              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+                                <Check className="h-4 w-4 text-primary" />
+                              </div>
+                              <span className="text-sm text-foreground/90 font-medium">
+                                Selected as reference for avatar
                               </span>
                             </div>
                             <button
                               onClick={() => {
                                 setSelectedImageIndex(null);
                                 setSelectedImageUrl(null);
-                                selectedImageUrlRef.current = null; // Also clear ref
+                                selectedImageUrlRef.current = null;
                                 setImageSelectionStage("selecting");
+                                setDisplayedImageCount(12); // Reset display count
                               }}
-                              className="w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors py-2 min-h-[44px] flex items-center justify-center"
+                              className="w-full text-center text-sm text-muted-foreground hover:text-foreground transition-all py-3 min-h-[48px] flex items-center justify-center gap-2 rounded-lg hover:bg-muted/30 group"
                             >
-                              Change selection
+                              <span className="group-hover:translate-x-[-2px] transition-transform">←</span>
+                              Choose different image
                             </button>
                           </div>
                         ) : (
-                          <>
-                            {/* Scrollable image grid */}
-                            <div className="relative -mx-1 overflow-x-auto pb-2 scroll-smooth scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
-                              <div className="flex gap-2 px-1 min-[400px]:gap-2.5 sm:gap-3">
-                                {referenceImages.map((img, i) => (
-                                  <button
-                                    key={i}
-                                    disabled={savingImage} // Disable all images while saving
-                                    onClick={() => {
-                                      if (!savingImage) {
-                                        setSelectedImageIndex(i);
-                                        void continueGenerationWithImage(img.url);
+                          <div className="p-6 space-y-5">
+                            {/* Beautiful grid layout */}
+                            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3">
+                              {referenceImages.slice(0, displayedImageCount).map((img, i) => (
+                                <button
+                                  key={i}
+                                  disabled={savingImage}
+                                  onClick={() => {
+                                    if (!savingImage) {
+                                      setSelectedImageIndex(i);
+                                      void continueGenerationWithImage(img.url);
+                                    }
+                                  }}
+                                  style={{
+                                    animationDelay: `${i * 30}ms`,
+                                  }}
+                                  className={cn(
+                                    "group relative aspect-square overflow-hidden rounded-xl transition-all duration-300",
+                                    "ring-1 ring-border/40 hover:ring-2 hover:ring-primary/40",
+                                    "hover:shadow-xl hover:shadow-primary/10",
+                                    "hover:scale-[1.02] active:scale-[0.98]",
+                                    "animate-in fade-in zoom-in-95",
+                                    selectedImageIndex === i && "ring-2 ring-primary scale-[1.02] shadow-xl shadow-primary/20",
+                                    savingImage && "opacity-60 cursor-not-allowed"
+                                  )}
+                                >
+                                  {/* Image with overlay gradient */}
+                                  <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+
+                                  <img
+                                    src={img.thumbnail}
+                                    alt={img.title}
+                                    className="h-full w-full object-cover transform group-hover:scale-110 transition-transform duration-500"
+                                    onError={(e) => {
+                                      console.warn('[Image] Failed to load:', img.thumbnail, img.title);
+                                      const button = e.currentTarget.closest('button');
+                                      if (button) {
+                                        button.style.display = 'none';
                                       }
                                     }}
-                                    className={cn(
-                                      "relative flex-shrink-0 overflow-hidden rounded-lg border-2 transition-all duration-200",
-                                      "w-[100px] h-[100px] min-[400px]:w-[110px] min-[400px]:h-[110px] sm:w-[120px] sm:h-[120px]",
-                                      selectedImageIndex === i
-                                        ? "border-primary ring-2 ring-primary/20"
-                                        : "border-border hover:border-primary/50",
-                                      savingImage && "opacity-60 cursor-not-allowed"
-                                    )}
-                                  >
-                                    <img
-                                      src={img.thumbnail}
-                                      alt={img.title}
-                                      className="h-full w-full object-cover"
-                                      onError={(e) => {
-                                        // Hide broken images completely
-                                        console.warn('[Image] Failed to load:', img.thumbnail, img.title);
-                                        const button = e.currentTarget.closest('button');
-                                        if (button) {
-                                          button.style.display = 'none';
-                                        }
-                                      }}
-                                    />
-                                    {selectedImageIndex === i && (
-                                      <div className="absolute inset-0 flex items-center justify-center bg-primary/10">
-                                        {savingImage ? (
-                                          <div className="rounded-full bg-primary p-1.5 animate-pulse">
-                                            <div className="h-4 w-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
-                                          </div>
-                                        ) : (
-                                          <div className="rounded-full bg-primary p-1.5">
-                                            <Check className="h-4 w-4 text-primary-foreground" />
-                                          </div>
-                                        )}
-                                      </div>
-                                    )}
-                                  </button>
-                                ))}
-                              </div>
+                                  />
+
+                                  {/* Selection indicator */}
+                                  {selectedImageIndex === i && (
+                                    <div className="absolute inset-0 flex items-center justify-center bg-primary/20 backdrop-blur-[2px]">
+                                      {savingImage ? (
+                                        <div className="rounded-full bg-primary p-2 shadow-lg animate-pulse ring-4 ring-background/50">
+                                          <div className="h-5 w-5 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
+                                        </div>
+                                      ) : (
+                                        <div className="rounded-full bg-primary p-2 shadow-lg ring-4 ring-background/50 animate-in zoom-in duration-200">
+                                          <Check className="h-5 w-5 text-primary-foreground" />
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {/* Hover effect indicator */}
+                                  <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-1 group-hover:translate-y-0">
+                                    <div className="rounded-full bg-background/90 backdrop-blur-sm p-1.5 shadow-lg ring-1 ring-border/50">
+                                      <div className="h-3 w-3 rounded-full bg-primary/20" />
+                                    </div>
+                                  </div>
+                                </button>
+                              ))}
                             </div>
 
-                          </>
+                            {/* Load More Button */}
+                            {displayedImageCount < referenceImages.length && (
+                              <div className="flex justify-center pt-2">
+                                <button
+                                  onClick={() => setDisplayedImageCount(prev => Math.min(prev + 12, referenceImages.length))}
+                                  className={cn(
+                                    "group relative px-6 py-3 rounded-xl font-medium text-sm",
+                                    "bg-gradient-to-r from-primary/10 via-primary/5 to-primary/10",
+                                    "hover:from-primary/20 hover:via-primary/10 hover:to-primary/20",
+                                    "ring-1 ring-primary/20 hover:ring-primary/30",
+                                    "transition-all duration-300 hover:shadow-lg hover:shadow-primary/10",
+                                    "overflow-hidden"
+                                  )}
+                                >
+                                  {/* Animated background */}
+                                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-primary/10 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
+
+                                  <span className="relative flex items-center gap-2 text-foreground">
+                                    <span>Load {Math.min(12, referenceImages.length - displayedImageCount)} More</span>
+                                    <span className="text-muted-foreground">({referenceImages.length - displayedImageCount} remaining)</span>
+                                  </span>
+                                </button>
+                              </div>
+                            )}
+
+                            {/* Showing count */}
+                            {referenceImages.length > 12 && (
+                              <div className="text-center">
+                                <p className="text-xs text-muted-foreground/60">
+                                  Showing {Math.min(displayedImageCount, referenceImages.length)} of {referenceImages.length} images
+                                </p>
+                              </div>
+                            )}
+                          </div>
                         )}
                       </div>
                     )}
